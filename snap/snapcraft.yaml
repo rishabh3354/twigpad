@@ -8,6 +8,10 @@ adopt-info: twigpad          # version from twigpad.__version__; the description
 summary: Tree notes outliner for Linux that opens and saves TreePad Lite .hjt files
 grade: stable
 confinement: strict
+# amd64 only: PyQt5's Qt (the PyQt5-Qt5 package) is published on PyPI for
+# x86_64 alone, so builds for other architectures cannot install it.
+architectures:
+  - build-on: [amd64]
 license: GPL-3.0-or-later
 icon: src/twigpad/resources/twigpad.svg
 website: https://github.com/rishabh3354/twigpad
