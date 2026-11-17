@@ -28,6 +28,29 @@
     </ul>
   </description>
 
+  <screenshots>
+    <screenshot type="default">
+      <caption>Notes organized in a tree, with formatted text and tables</caption>
+      <image>https://raw.githubusercontent.com/rishabh3354/twigpad/main/docs/screenshots/store/01-notes-in-a-tree.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Dark theme, pictures in notes and branches open in tabs</caption>
+      <image>https://raw.githubusercontent.com/rishabh3354/twigpad/main/docs/screenshots/store/02-dark-theme-pictures-tabs.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Search the titles and text of every note at once</caption>
+      <image>https://raw.githubusercontent.com/rishabh3354/twigpad/main/docs/screenshots/store/03-search-every-note.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Tags, links between notes and backlinks</caption>
+      <image>https://raw.githubusercontent.com/rishabh3354/twigpad/main/docs/screenshots/store/04-tags-and-links.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Headings, lists, colours, pictures and tables</caption>
+      <image>https://raw.githubusercontent.com/rishabh3354/twigpad/main/docs/screenshots/store/05-rich-text-formatting.png</image>
+    </screenshot>
+  </screenshots>
+
   <launchable type="desktop-id">com.warlordsoftwares.twigpad.desktop</launchable>
   <provides>
     <binary>twigpad</binary>

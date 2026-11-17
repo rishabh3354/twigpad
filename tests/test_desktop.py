@@ -138,5 +138,15 @@ class DesktopTests(unittest.TestCase):
             win.deleteLater()
 
 
+class QtMessageTests(unittest.TestCase):
+    def test_font_noise_is_dropped_other_messages_kept(self):
+        import io
+        from twigpad import __main__ as entry
+        with mock.patch("sys.stderr", new=io.StringIO()) as err:
+            entry.qt_message(None, None, 'OpenType support missing for "Saab", script 13')
+            entry.qt_message(None, None, "QPixmap: something real")
+        self.assertEqual(err.getvalue(), "QPixmap: something real\n")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -32,9 +32,24 @@ def dump(path: str, show_text: bool) -> int:
     return 0
 
 
+# Qt messages that say nothing useful to the user. "OpenType support missing"
+# is printed once for every installed font that lacks shaping tables for its
+# script (many Indic fonts do) whenever Qt looks for a font that has a
+# character; the text still shows.
+NOISE = ("OpenType support missing for",)
+
+
+def qt_message(_mode, _context, message: str) -> None:
+    if message.startswith(NOISE):
+        return
+    sys.stderr.write(message + "\n")
+
+
 def run_gui(path=None, language: str = "") -> int:
-    from PyQt5.QtCore import QSettings, Qt, QTimer
+    from PyQt5.QtCore import QSettings, Qt, QTimer, qInstallMessageHandler
     from PyQt5.QtWidgets import QApplication
+
+    qInstallMessageHandler(qt_message)
 
     from .portable import portable_ini
 

@@ -64,6 +64,20 @@ the English text does not have. To add a language, add it to
 `i18n.LANGUAGES` (and to `PLURAL_FORMS`/`plural_index` if its plurals differ),
 start its file from `python3 tools/i18n_strings.py --json`, and translate.
 
+## Store screenshots
+
+The screenshots in `docs/screenshots/store/` (listed in the metainfo file) are
+made from a sample notebook by a script, so they can be redone after the window
+changes:
+
+```bash
+python3 tools/store_screenshots.py
+```
+
+It draws the real window at twice the normal size on Qt's VNC platform (a
+large virtual screen; its server listens on a local port only while the script
+runs) and adds a title bar, rounded corners and a shadow.
+
 ## Layout
 
 | Path | Contents |
@@ -73,7 +87,7 @@ start its file from `python3 tools/i18n_strings.py --json`, and translate.
 | `src/twigpad/search.py`, `links.py`, `export.py`, `model.py`, `rtf.py` | Core logic (no Qt) |
 | `src/twigpad/ui/` | Qt widgets: main window, tree, find dialog, link highlighter, icons |
 | `src/twigpad/resources/` | Files shipped inside the package (app icon, translations in `i18n/`) |
-| `tools/` | Developer scripts (`i18n_strings.py` checks the translations) |
+| `tools/` | Developer scripts (`i18n_strings.py` checks the translations, `store_screenshots.py` makes the store screenshots) |
 | `data/` | Desktop integration: `.desktop` entry, AppStream metadata, MIME type |
 | `docs/` | User guide and file format notes |
 | `tests/` | Unit tests and sample files |

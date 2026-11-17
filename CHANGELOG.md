@@ -130,6 +130,8 @@ All notable changes to Twigpad are listed here. The format follows
   renames a node; Ctrl+Up/Down scroll the tree; Shift+F10 opens the
   right-click menu; Find and Go to Start/End in the article's right-click
   menu.
+- Five store screenshots (`docs/screenshots/store/`), listed in the metainfo
+  file, and `tools/store_screenshots.py` to make them again.
 
 ### Changed
 - A file has exactly one top node, as the `.hjt` format requires. Files with
@@ -146,5 +148,7 @@ All notable changes to Twigpad are listed here. The format follows
 - View → Article Font and Tree Font became one Fonts window.
 
 ### Fixed
+- Tab close buttons are a sharp × in the theme's text colour; the old one was
+  blurry on large screens and almost invisible in the dark theme.
 - The box for renaming a node in the tree no longer cuts off the bottom of the title.
 - Zooming the tree with Ctrl+mouse wheel now also resizes the note icons.

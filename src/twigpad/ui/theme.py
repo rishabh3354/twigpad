@@ -13,8 +13,9 @@ import subprocess
 from functools import lru_cache
 from typing import Dict, Optional
 
-from PyQt5.QtGui import QColor, QPalette
-from PyQt5.QtWidgets import QApplication, QStyleFactory
+from PyQt5.QtCore import QPointF, QRectF, Qt
+from PyQt5.QtGui import QColor, QPainter, QPalette, QPen
+from PyQt5.QtWidgets import QApplication, QProxyStyle, QStyle, QStyleFactory
 
 from ..i18n import N_
 
@@ -161,6 +162,40 @@ def resolve(name: str) -> str:
     return name if name in ("light", "dark") else "system"
 
 
+class TwigStyle(QProxyStyle):
+    """Fusion, with the tab close button drawn as a sharp X in the text colour.
+    Fusion's own is a small dark picture: blurry on large screens and hard to
+    see in the dark theme."""
+
+    def __init__(self):
+        super().__init__(QStyleFactory.create("Fusion"))
+
+    def drawPrimitive(self, element, option, painter, widget=None):
+        if element != QStyle.PE_IndicatorTabClose:
+            super().drawPrimitive(element, option, painter, widget)
+            return
+        r = QRectF(option.rect)
+        hover = bool(option.state & QStyle.State_MouseOver)
+        ink = QColor(option.palette.color(QPalette.WindowText))
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing)
+        if hover:
+            back = QColor(ink)
+            back.setAlpha(45)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(back)
+            painter.drawRoundedRect(r.adjusted(1, 1, -1, -1), 3, 3)
+        else:
+            ink.setAlpha(150)
+        pen = QPen(ink, 1.3)
+        pen.setCapStyle(Qt.RoundCap)
+        painter.setPen(pen)
+        c, d = r.center(), min(r.width(), r.height()) * 0.22
+        painter.drawLine(QPointF(c.x() - d, c.y() - d), QPointF(c.x() + d, c.y() + d))
+        painter.drawLine(QPointF(c.x() + d, c.y() - d), QPointF(c.x() - d, c.y() + d))
+        painter.restore()
+
+
 def apply(name: str, app: Optional[QApplication] = None) -> str:
     """Apply a theme to the whole application; returns light, dark or system."""
     global current
@@ -178,7 +213,7 @@ def apply(name: str, app: Optional[QApplication] = None) -> str:
         app.setStyleSheet("")
     else:
         tokens = DARK if effective == "dark" else LIGHT
-        app.setStyle(QStyleFactory.create("Fusion"))
+        app.setStyle(TwigStyle())
         app.setPalette(palette_for(tokens))
         app.setStyleSheet(STYLE % tokens)
     current = effective

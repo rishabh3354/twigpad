@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/main-window.png" alt="Twigpad main window: a tree of notes on the left and the selected note's text on the right" width="840">
+  <img src="docs/screenshots/store/01-notes-in-a-tree.png" alt="Twigpad main window: a tree of notes with icons on the left and a formatted note with headings, a list and a table on the right" width="840">
 </p>
 
 Twigpad is a **two-pane notes organizer**: a tree of notes on the left, the text
@@ -32,6 +32,7 @@ to start, simple to use, and built to last.
 ## Contents
 
 - [Features](#features)
+- [Screenshots](#screenshots)
 - [Coming from TreePad?](#coming-from-treepad)
 - [What people use it for](#what-people-use-it-for)
 - [Install](#install)
@@ -73,9 +74,30 @@ to start, simple to use, and built to last.
 - **Spell check in 50 languages.** Download dictionaries from inside the app with one click.
 - **Fast and light.** Starts instantly, works fully from the keyboard, runs on any Linux desktop.
 
-<p align="center">
-  <img src="docs/screenshots/find-all.png" alt="Find All lists every match across note titles and text" width="560">
-</p>
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/screenshots/store/02-dark-theme-pictures-tabs.png" alt="Dark theme: a travel note with a picture and a numbered list, with branches open in tabs" width="100%"><br>
+      <sub><b>Dark theme</b>, pictures in notes and branches open in tabs</sub>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/screenshots/store/03-search-every-note.png" alt="The Tree Search window listing every note whose title or text matches" width="100%"><br>
+      <sub><b>Search</b> the titles and text of every note at once</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/screenshots/store/04-tags-and-links.png" alt="A meeting note with #tags and links to other notes, beside the Tags and Backlinks panels" width="100%"><br>
+      <sub><b>Tags</b>, links between notes and backlinks</sub>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/screenshots/store/05-rich-text-formatting.png" alt="The Format menu open on a recipe note, showing headings, lists, colours, pictures and tables" width="100%"><br>
+      <sub><b>Formatting</b>: headings, lists, colours, pictures and tables</sub>
+    </td>
+  </tr>
+</table>
 
 ## Coming from TreePad?
 
