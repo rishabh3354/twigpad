@@ -64,9 +64,27 @@ All notable changes to Twigpad are listed here. The format follows
 - Note icons and colours (Node → Icon and Colour).
 - Password protection: File → Set Password encrypts the file (AES-256-GCM,
   key from scrypt).
+- View → Colours: background and text colours for the tree and the article.
+- Options → At Startup (reopen the last file, ask, Quick Start window, or a
+  new file) and When Closing With Unsaved Changes (ask, save, don't save).
+- Options → Use Tab to Switch Between Tree and Article (Ctrl+Tab then types a
+  tab), Minimize to Tray Instead of the Taskbar, and Keep Settings Next to
+  the Program.
+- Cut and Copy take the whole article when nothing is selected; Edit → Delete
+  clears the whole article after asking.
+- File → Import → Text File into Article (Replace Its Text).
+- Five movable toolbars (File, Tree Edit, Article Edit, View, Navigate),
+  shown or hidden in View → Toolbars.
+- Shift+drop onto a node puts the dragged node below it; a slow second click
+  renames a node; Ctrl+Up/Down scroll the tree; Shift+F10 opens the
+  right-click menu; Find and Go to Start/End in the article's right-click
+  menu.
 
 ### Changed
 - A file has exactly one top node, as the `.hjt` format requires. Files with
   several top-level nodes are opened under a new top node.
 - Replace moved to Ctrl+R (Ctrl+H now follows links); Save As is Ctrl+Alt+S.
 - Ctrl+V in the tree pastes inside the selected node; Ctrl+Shift+V pastes below.
+- Ctrl+F searches the selected node when pressed in the article, and the whole
+  file when pressed in the tree.
+- One fixed toolbar became five movable ones; Cut and Copy are always enabled.

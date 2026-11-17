@@ -109,7 +109,8 @@ class WindowTests(unittest.TestCase):
 
     def test_drop_moves_node_onto_another(self):
         class FakeDrop:
-            def __init__(self, src): self.src = src
+            def __init__(self, src, mods=Qt.NoModifier): self.src, self.mods = src, mods
+            def keyboardModifiers(self): return self.mods
             def source(self): return self.src
             def pos(self): return None
             def setDropAction(self, a): pass

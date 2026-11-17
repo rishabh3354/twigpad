@@ -16,6 +16,14 @@ from . import APP_ID
 INI_NAME = f"{APP_ID}.ini"
 
 
+def program_dir(argv0: Optional[str] = None, environ: Optional[Mapping[str, str]] = None) -> str:
+    """The folder of the AppImage file, or of the program itself."""
+    environ = os.environ if environ is None else environ
+    if environ.get("APPIMAGE"):
+        return os.path.dirname(os.path.abspath(environ["APPIMAGE"]))
+    return os.path.dirname(os.path.abspath(sys.argv[0] if argv0 is None else argv0))
+
+
 def portable_ini(argv0: Optional[str] = None, environ: Optional[Mapping[str, str]] = None) -> Optional[str]:
     """Path of the portable settings file, or None when it does not exist."""
     environ = os.environ if environ is None else environ

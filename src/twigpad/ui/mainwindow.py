@@ -11,7 +11,7 @@ from PyQt5.QtCore import (
     QDateTime, QEvent, QFileSystemWatcher, QLocale, QMimeData, QSettings, Qt, QTimer, QUrl,
 )
 from PyQt5.QtGui import (
-    QColor, QDesktopServices, QFont, QIcon, QImage, QKeySequence, QPixmap, QTextBlockFormat,
+    QColor, QDesktopServices, QPalette, QFont, QIcon, QImage, QKeySequence, QPixmap, QTextBlockFormat,
     QTextCharFormat, QTextCursor, QTextDocument, QTextLength, QTextListFormat, QTextTableFormat,
 )
 from PyQt5.QtWidgets import (
@@ -22,7 +22,8 @@ from PyQt5.QtWidgets import (
 )
 
 from .. import (
-    APP_ID, APP_NAME, __version__, export, hjt, importers, links, search, spell, tags, textfmt, twig,
+    APP_ID, APP_NAME, __version__, export, hjt, importers, links, portable, search, spell, tags,
+    textfmt, twig,
 )
 from ..model import Document, Node
 from . import icons, treestyle
@@ -44,6 +45,11 @@ OWN_EXTS = (".hjt", ".twig")
 IMAGE_FILTERS = "Images (*.png *.jpg *.jpeg *.gif *.bmp *.webp);;All files (*)"
 TEXT_FILTERS = "Text files (*.txt *.text *.md *.log);;All files (*)"
 VIEW_MODES = ("both", "tree", "article")
+STARTUP_MODES = {"reopen": "&Reopen the Last File", "ask": "&Ask Whether to Reopen the Last File",
+                 "quickstart": "Show the &Quick Start Window", "new": "Start With a &New File"}
+CLOSE_MODES = {"ask": "&Ask Whether to Save", "save": "&Save Automatically",
+               "discard": "&Don't Save (not recommended)"}
+COLOR_KEYS = ("tree_bg", "tree_fg", "article_bg", "article_fg")
 NEW_FILE_TITLE = "Notes"
 NODE_MIME = "application/x-twigpad-notes"
 MAX_RECENT = 10
@@ -95,6 +101,7 @@ class MainWindow(QMainWindow):
         self.editor.needRich.connect(self.make_rich)
         self.link_highlighter = ArticleHighlighter(self.editor.document())
         self.editor.viewport().installEventFilter(self)  # Ctrl+click follows links
+        self.editor.installEventFilter(self)             # Tab switches panes (option)
         self.editor.setContextMenuPolicy(Qt.CustomContextMenu)
         self.editor.customContextMenuRequested.connect(self._editor_menu)
         self.splitter = QSplitter(Qt.Horizontal)
@@ -141,8 +148,6 @@ class MainWindow(QMainWindow):
         self.editor.selectionChanged.connect(self._update_word_label)
         self.editor.undoAvailable.connect(lambda on: self.act_undo.setEnabled(on and not self.read_only))
         self.editor.redoAvailable.connect(lambda on: self.act_redo.setEnabled(on and not self.read_only))
-        self.editor.copyAvailable.connect(lambda on: self.act_cut.setEnabled(on and not self.read_only))
-        self.editor.copyAvailable.connect(self.act_copy.setEnabled)
         QApplication.clipboard().dataChanged.connect(self._on_clipboard_changed)
 
         self._restore_settings()
@@ -194,6 +199,9 @@ class MainWindow(QMainWindow):
             tip="Add all nodes of another tree file or backup inside the selected node")
         self.act_import_text = self._action("Text Files as New Nodes...", self.import_text_files,
                                             tip="Add one or more text files as new nodes inside the selected node")
+        self.act_replace_article = self._action(
+            "Text File into Article (Replace Its Text)...", self.replace_article_from_file,
+            tip="Replace the text of the selected node with a text file")
         self.act_import_csv = self._action("CSV File (one node per row)...", self.import_csv_file,
                                            tip="Add a node for every row of a CSV file inside the selected node")
         self.act_export_node = self._action("Selected Node...", lambda: self.export_file("text", "node"))
@@ -227,12 +235,18 @@ class MainWindow(QMainWindow):
                                      icons.themed("edit-undo", S.SP_ArrowBack), context_widget=e)
         self.act_redo = self._action("&Redo", e.redo, "Ctrl+Y",
                                      icons.themed("edit-redo", S.SP_ArrowForward), context_widget=e)
-        self.act_cut = self._action("Cu&t", e.cut, QKeySequence.Cut, context_widget=e)
-        self.act_copy = self._action("&Copy", e.copy, QKeySequence.Copy, context_widget=e)
+        self.act_cut = self._action("Cu&t", self.cut_article, QKeySequence.Cut, context_widget=e,
+                                    tip="Cut the selected text, or the whole article when nothing is selected")
+        self.act_copy = self._action("&Copy", self.copy_article, QKeySequence.Copy, context_widget=e,
+                                     tip="Copy the selected text, or the whole article when nothing is selected")
+        self.act_delete_text = self._action("De&lete", self.delete_article_text,
+                                            tip="Delete the selected text, or the whole article (asks first)")
+        self.act_goto_start = self._action("Go to &Start", lambda: self._goto(QTextCursor.Start))
+        self.act_goto_end = self._action("Go to &End", lambda: self._goto(QTextCursor.End))
         self.act_paste = self._action("&Paste", e.paste, QKeySequence.Paste, context_widget=e)
         self.act_select_all = self._action("Select &All", e.selectAll, QKeySequence.SelectAll,
                                            context_widget=e)
-        for a in (self.act_undo, self.act_redo, self.act_cut, self.act_copy):
+        for a in (self.act_undo, self.act_redo):
             a.setEnabled(False)
         self.act_date = self._action("Insert &Date", lambda: self.insert_datetime("date"),
                                      "Ctrl+Shift+D", context_widget=e)
@@ -309,7 +323,7 @@ class MainWindow(QMainWindow):
                 "(for pasted email)")
 
         # Search
-        self.act_find = self._action("&Find...", lambda: self.show_find(False), ["Ctrl+F", "Shift+F12"],
+        self.act_find = self._action("&Find...", self.find_here, ["Ctrl+F", "Shift+F12"],
                                      icons.themed("edit-find", S.SP_FileDialogContentsView),
                                      "Search titles and articles of all nodes")
         self.act_find_next = self._action("Find &Next", lambda: self.find_again(False), "F3")
@@ -431,11 +445,34 @@ class MainWindow(QMainWindow):
         self.act_article_font = self._action("&Article Font...", lambda: self.choose_font("editor"))
         self.act_tree_font = self._action("&Tree Font...", lambda: self.choose_font("tree"))
         self.act_reset_fonts = self._action("&Reset Fonts", self.reset_fonts)
+        self.act_pane_colors = self._action("Colo&urs...", self.choose_pane_colors,
+                                            tip="Background and text colours of the tree and the article")
 
         # Options
-        self.act_open_last = self._action("&Open Last File at Startup",
-                                          lambda on: self.settings.setValue("options/open_last", on),
-                                          checkable=True)
+        self.startup_group = QActionGroup(self)
+        self.act_startup = {}
+        for mode, label in STARTUP_MODES.items():
+            act = QAction(label, self, checkable=True)
+            act.triggered.connect(lambda _c=False, m=mode: self.settings.setValue("options/startup", m))
+            self.startup_group.addAction(act)
+            self.act_startup[mode] = act
+        self.act_open_last = self.act_startup["reopen"]
+        self.close_group = QActionGroup(self)
+        self.act_close_modes = {}
+        for mode, label in CLOSE_MODES.items():
+            act = QAction(label, self, checkable=True)
+            act.triggered.connect(lambda _c=False, m=mode: self.settings.setValue("options/on_close", m))
+            self.close_group.addAction(act)
+            self.act_close_modes[mode] = act
+        self.act_tab_switch = self._action("Use &Tab to Switch Between Tree and Article",
+                                           self.set_tab_switch, checkable=True,
+                                           tip="Tab switches panes; Ctrl+Tab then types a tab in the article")
+        self.act_tray_minimize = self._action(
+            "&Minimize to Tray Instead of the Taskbar",
+            lambda on: self.settings.setValue("options/tray_on_minimize", on), checkable=True)
+        self.act_portable = self._action(
+            "Keep Settings &Next to the Program", self.set_portable, checkable=True,
+            tip=f"Store settings in {portable.INI_NAME} beside the program, for use from a USB stick")
         self.act_backup = self._action(
             "Keep a &Backup Copy (.bak) When Saving",
             lambda on: self.settings.setValue("options/backup", on), checkable=True)
@@ -470,6 +507,8 @@ class MainWindow(QMainWindow):
         m.addSeparator()
         sub = m.addMenu("&Import")
         sub.addActions([self.act_import_tree, self.act_import_text, self.act_import_csv])
+        sub.addSeparator()
+        sub.addAction(self.act_replace_article)
         sub = m.addMenu("&Export")
         text = sub.addMenu("As &Text")
         text.addActions([self.act_export_node, self.act_export_branch, self.act_export_all])
@@ -487,7 +526,7 @@ class MainWindow(QMainWindow):
         m = mb.addMenu("&Edit")
         m.addActions([self.act_undo, self.act_redo])
         m.addSeparator()
-        m.addActions([self.act_cut, self.act_copy, self.act_paste])
+        m.addActions([self.act_cut, self.act_copy, self.act_paste, self.act_delete_text])
         m.addSeparator()
         m.addAction(self.act_select_all)
         m.addSeparator()
@@ -550,13 +589,20 @@ class MainWindow(QMainWindow):
             act.setShortcut(QKeySequence(key))
             panels.addAction(act)
         m.addSeparator()
-        m.addActions([self.act_article_font, self.act_tree_font, self.act_reset_fonts])
+        m.addActions([self.act_article_font, self.act_tree_font, self.act_reset_fonts, self.act_pane_colors])
         m.addSeparator()
         self.view_menu = m
         m.addAction(self.act_switch_pane)
 
         m = mb.addMenu("&Options")
-        m.addActions([self.act_open_last, self.act_backup, self.act_autosave])
+        sub = m.addMenu("At &Startup")
+        sub.addActions(list(self.act_startup.values()))
+        sub = m.addMenu("When &Closing With Unsaved Changes")
+        sub.addActions(list(self.act_close_modes.values()))
+        m.addSeparator()
+        m.addActions([self.act_backup, self.act_autosave])
+        m.addSeparator()
+        m.addActions([self.act_tab_switch, self.act_tray_minimize, self.act_portable])
         m.addSeparator()
         m.addAction(self.act_auto_paste)
         m.addSeparator()
@@ -570,6 +616,7 @@ class MainWindow(QMainWindow):
 
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._tree_menu)
+        self.tree.installEventFilter(self)
 
     def _node_menu_actions(self) -> List[QAction]:
         sep = lambda: self._separator()  # noqa: E731
@@ -601,17 +648,47 @@ class MainWindow(QMainWindow):
         menu.exec_(self.tree.viewport().mapToGlobal(pos))
 
     def _create_toolbar(self) -> None:
-        tb = self.addToolBar("Main toolbar")
-        tb.setObjectName("main-toolbar")
-        tb.setMovable(False)
-        tb.addActions([self.act_new, self.act_open, self.act_save])
-        tb.addSeparator()
-        tb.addActions([self.act_add_after, self.act_add_child, self.act_delete])
-        tb.addSeparator()
-        tb.addActions([self.act_move_up, self.act_move_down, self.act_move_left, self.act_move_right])
-        tb.addSeparator()
-        tb.addActions([self.act_find, self.act_print])
-        self.view_menu.addAction(tb.toggleViewAction())
+        """Five toolbars; show or hide them in View > Toolbars and drag them
+        by their handle to move them."""
+        S = QStyle
+        self.act_cut.setIcon(icons.themed_drawn("edit-cut", icons.cut))
+        self.act_copy.setIcon(icons.themed_drawn("edit-copy", icons.copy))
+        self.act_paste.setIcon(icons.themed_drawn("edit-paste", icons.paste))
+        self.act_follow_link.setIcon(icons.themed("go-jump", S.SP_CommandLink))
+        self.act_bold.setIcon(icons.themed_drawn("format-text-bold", icons.bold))
+        self.act_italic.setIcon(icons.themed_drawn("format-text-italic", icons.italic))
+        self.act_prev_sibling.setIcon(icons.themed("go-top", S.SP_ArrowUp))
+        self.act_next_sibling.setIcon(icons.themed("go-bottom", S.SP_ArrowDown))
+        self.act_focus.setIcon(icons.themed("zoom-in", S.SP_FileDialogContentsView))
+        self.act_unfocus.setIcon(icons.themed("zoom-original", S.SP_FileDialogListView))
+        self.act_word_wrap.setIcon(icons.themed("format-justify-fill", S.SP_FileDialogDetailedView))
+        bars = [
+            ("file-toolbar", "File", [self.act_new, self.act_open, self.act_save, None, self.act_print]),
+            ("tree-toolbar", "Tree Edit", [self.act_add_after, self.act_add_child, self.act_delete, None,
+                                           self.act_move_up, self.act_move_down, self.act_move_left,
+                                           self.act_move_right]),
+            ("article-toolbar", "Article Edit", [self.act_undo, self.act_redo, None, self.act_cut,
+                                                 self.act_copy, self.act_paste, None, self.act_bold,
+                                                 self.act_italic]),
+            ("view-toolbar", "View", [self.act_focus, self.act_unfocus, self.act_word_wrap]),
+            ("navigate-toolbar", "Navigate", [self.act_find, self.act_prev_sibling, self.act_next_sibling,
+                                              self.act_follow_link]),
+        ]
+        self.toolbars = {}
+        sub = self.view_menu.addMenu("Tool&bars")
+        for name, title, acts in bars:
+            tb = self.addToolBar(title)
+            tb.setObjectName(name)
+            tb.setMovable(True)
+            for a in acts:
+                if a is None:
+                    tb.addSeparator()
+                else:
+                    tb.addAction(a)
+            self.toolbars[name] = tb
+            sub.addAction(tb.toggleViewAction())
+        for name in ("view-toolbar", "article-toolbar"):
+            self.toolbars[name].hide()   # off until turned on in View > Toolbars
 
     def _create_statusbar(self) -> None:
         sb = self.statusBar()
@@ -656,7 +733,19 @@ class MainWindow(QMainWindow):
             if desc and font.fromString(desc):
                 widget.setFont(font)
         self._update_tab_width()
-        self.act_open_last.setChecked(s.value("options/open_last", True, type=bool))
+        startup = s.value("options/startup", "", type=str)
+        if startup not in STARTUP_MODES:   # older setting: a plain on/off
+            startup = "reopen" if s.value("options/open_last", True, type=bool) else "new"
+        self.act_startup[startup].setChecked(True)
+        on_close = s.value("options/on_close", "ask", type=str)
+        self.act_close_modes[on_close if on_close in CLOSE_MODES else "ask"].setChecked(True)
+        self.act_tab_switch.setChecked(s.value("options/tab_switch", False, type=bool))
+        self.set_tab_switch(self.act_tab_switch.isChecked())
+        self.act_tray_minimize.setChecked(s.value("options/tray_on_minimize", False, type=bool))
+        self.act_portable.blockSignals(True)
+        self.act_portable.setChecked(self._using_portable())
+        self.act_portable.blockSignals(False)
+        self.apply_pane_colors()
         self.act_backup.setChecked(s.value("options/backup", True, type=bool))
         self.act_autosave.setChecked(s.value("options/autosave", False, type=bool))
         self.set_autosave(self.act_autosave.isChecked())
@@ -704,13 +793,66 @@ class MainWindow(QMainWindow):
         else:
             self.recent_menu.addAction("(no recent files)").setEnabled(False)
 
+    def startup_mode(self) -> str:
+        return next((m for m, a in self.act_startup.items() if a.isChecked()), "reopen")
+
     def open_startup_file(self) -> None:
-        """Reopen the most recent .hjt file when that option is on."""
-        if not self.act_open_last.isChecked():
-            return
-        for path in self.recent_files()[:1]:
-            if path.lower().endswith(OWN_EXTS) and os.path.exists(path):
-                self.load_path(path)
+        """What happens when the program starts without a file to open."""
+        mode = self.startup_mode()
+        last = next((p for p in self.recent_files()[:1]
+                     if p.lower().endswith(OWN_EXTS) and os.path.exists(p)), None)
+        if mode == "reopen" and last:
+            self.load_path(last)
+        elif mode == "ask" and last and self._ask_reopen(os.path.basename(last)):
+            self.load_path(last)
+        elif mode == "quickstart":
+            choice = self._quick_start()
+            if choice == "open":
+                self.open_file()
+            elif choice and choice != "new":
+                self.load_path(choice)
+
+    def _ask_reopen(self, name: str) -> bool:
+        return QMessageBox.question(self, APP_NAME, f"Open the last file, \"{name}\"?",
+                                    QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes) == QMessageBox.Yes
+
+    def _quick_start(self) -> Optional[str]:
+        """The Quick Start window: 'new', 'open', a file path, or None."""
+        from PyQt5.QtWidgets import QCheckBox, QListWidget
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"{APP_NAME} - Quick Start")
+        lay = QVBoxLayout(dlg)
+        lay.addWidget(QLabel("Open a recent file (double-click), or start something new:"))
+        recent = QListWidget()
+        for path in self.recent_files():
+            if os.path.exists(path):
+                recent.addItem(path)
+        lay.addWidget(recent)
+        result = {"choice": None}
+
+        def done(choice):
+            result["choice"] = choice
+            dlg.accept()
+        recent.itemActivated.connect(lambda it: done(it.text()))
+        row = QDialogButtonBox()
+        for label, choice in (("&New File", "new"), ("&Open...", "open")):
+            row.addButton(label, QDialogButtonBox.ActionRole).clicked.connect(
+                lambda _c=False, c=choice: done(c))
+        open_btn = row.addButton("Open &Selected", QDialogButtonBox.AcceptRole)
+        open_btn.clicked.connect(lambda: recent.currentItem() and done(recent.currentItem().text()))
+        row.addButton(QDialogButtonBox.Close).clicked.connect(dlg.reject)
+        lay.addWidget(row)
+        again = QCheckBox("Show this window at startup")
+        again.setChecked(True)
+        lay.addWidget(again)
+        if recent.count():
+            recent.setCurrentRow(0)
+        dlg.resize(520, 320)
+        dlg.exec_()
+        if not again.isChecked():
+            self.act_startup["reopen"].setChecked(True)
+            self.settings.setValue("options/startup", "reopen")
+        return result["choice"]
 
     # ===================================================== editor <-> tree
 
@@ -1057,7 +1199,7 @@ class MainWindow(QMainWindow):
             self.act_read_only.blockSignals(False)
         self.editor.setReadOnly(on)
         self.tree.setDragDropMode(QAbstractItemView.NoDragDrop if on else QAbstractItemView.InternalMove)
-        self.tree.setEditTriggers(QAbstractItemView.NoEditTriggers if on else QAbstractItemView.EditKeyPressed)
+        self.tree.setEditTriggers(QAbstractItemView.NoEditTriggers if on else NoteTree.EDIT_TRIGGERS)
         for act in (self.act_save, self.act_paste, self.act_date, self.act_time, self.act_datetime,
                     self.act_link_file, self.act_link_folder, self.act_insert_file, self.act_replace,
                     self.act_upper, self.act_lower, self.act_strip, self.act_strip_returns,
@@ -1068,7 +1210,9 @@ class MainWindow(QMainWindow):
         doc = self.editor.document()
         self.act_undo.setEnabled(not on and doc.isUndoAvailable())
         self.act_redo.setEnabled(not on and doc.isRedoAvailable())
-        self.act_cut.setEnabled(not on and self.editor.textCursor().hasSelection())
+        self.act_cut.setEnabled(not on)
+        self.act_delete_text.setEnabled(not on)
+        self.act_replace_article.setEnabled(not on)
         self.read_only_label.setVisible(on)
         if self._find_dialog is not None and on and self._find_dialog.btn_replace.isVisible():
             self._find_dialog.show_dialog(False)
@@ -1359,6 +1503,9 @@ class MainWindow(QMainWindow):
         super().changeEvent(event)
         if event.type() == QEvent.ActivationChange and self.isActiveWindow():
             self.disk_timer.start()
+        elif (event.type() == QEvent.WindowStateChange and self.isMinimized()
+              and self.act_tray_minimize.isChecked() and QSystemTrayIcon.isSystemTrayAvailable()):
+            QTimer.singleShot(0, self.minimize_to_tray)
 
     def check_disk(self) -> None:
         """Ask what to do when another program changed or removed the open file."""
@@ -1483,6 +1630,10 @@ class MainWindow(QMainWindow):
         if extra:
             menu.insertActions(first, extra)
             menu.insertSeparator(first)
+        menu.addSeparator()
+        menu.addActions([self.act_find, self.act_find_next])
+        nav = menu.addMenu("&Navigate")
+        nav.addActions([self.act_goto_start, self.act_goto_end, self.act_follow_link])
         menu.exec_(self.editor.viewport().mapToGlobal(pos))
         menu.deleteLater()
 
@@ -1919,6 +2070,180 @@ class MainWindow(QMainWindow):
     def _update_crypto_label(self) -> None:
         self.crypto_label.setVisible(self.crypto is not None)
 
+    # ======================================================= article edits
+
+    def _goto(self, where) -> None:
+        self.editor.moveCursor(where)
+        self.editor.setFocus()
+
+    def copy_article(self) -> None:
+        """Copy the selection, or the whole article when nothing is selected."""
+        if self.editor.textCursor().hasSelection():
+            self.editor.copy()
+            return
+        keep = self.editor.textCursor()
+        self.editor.selectAll()
+        self.editor.copy()
+        self.editor.setTextCursor(keep)
+        self.statusBar().showMessage("Copied the whole article.", 3000)
+
+    def cut_article(self) -> None:
+        """Cut the selection, or the whole article when nothing is selected."""
+        if not self.editor.isEnabled() or not self._writable():
+            return
+        if not self.editor.textCursor().hasSelection():
+            self.editor.selectAll()
+        self.editor.cut()
+
+    def _confirm_clear_article(self) -> bool:
+        return QMessageBox.question(self, "Delete", "Delete the whole text of this article?",
+                                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No) == QMessageBox.Yes
+
+    def delete_article_text(self) -> None:
+        if not self.editor.isEnabled() or not self._writable():
+            return
+        cursor = self.editor.textCursor()
+        if cursor.hasSelection():
+            cursor.removeSelectedText()
+        elif self.editor.document().characterCount() > 1 and self._confirm_clear_article():
+            cursor.select(QTextCursor.Document)
+            cursor.removeSelectedText()
+
+    def replace_article_from_file(self, path: Optional[str] = None) -> bool:
+        """Replace the article's text with a text file (Ctrl+Z brings it back)."""
+        if not self.editor.isEnabled() or not self._writable():
+            return False
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(self, "Text File into Article", self._last_dir(), TEXT_FILTERS)
+            if not path:
+                return False
+        text = self._read_text(path)
+        if text is None:
+            return False
+        cursor = self.editor.textCursor()
+        cursor.select(QTextCursor.Document)
+        cursor.insertText(text)
+        self.editor.moveCursor(QTextCursor.Start)
+        return True
+
+    def show_context_menu(self, widget) -> None:
+        """Shift+F10: the right-click menu of the tree or the article."""
+        if widget is self.tree:
+            item = self.tree.currentItem()
+            rect = self.tree.visualItemRect(item) if item is not None else self.tree.viewport().rect()
+            self._tree_menu(rect.center())
+        else:
+            self._editor_menu(self.editor.cursorRect().center())
+
+    # ======================================================= options
+
+    def set_tab_switch(self, on: bool) -> None:
+        """Tab switches panes; Ctrl+Tab then types a tab character in the article."""
+        self.settings.setValue("options/tab_switch", on)
+        self.act_switch_pane.setShortcuts([QKeySequence("F6")] if on else
+                                          [QKeySequence("F6"), QKeySequence("Ctrl+Tab")])
+
+    def pane_colors(self) -> dict:
+        return {k: self.settings.value(f"colors/{k}", "", type=str) for k in COLOR_KEYS}
+
+    def apply_pane_colors(self) -> None:
+        colors = self.pane_colors()
+        for widget, bg, fg in ((self.tree, "tree_bg", "tree_fg"), (self.editor, "article_bg", "article_fg")):
+            pal = QApplication.palette(widget)
+            for role, key in ((pal.Base, bg), (pal.Text, fg)):
+                if colors[key] and QColor(colors[key]).isValid():
+                    pal.setColor(role, QColor(colors[key]))
+            widget.setPalette(pal)
+            widget.viewport().update()
+
+    def set_pane_color(self, key: str, color: str) -> None:
+        if color:
+            self.settings.setValue(f"colors/{key}", color)
+        else:
+            self.settings.remove(f"colors/{key}")
+        self.apply_pane_colors()
+
+    def choose_pane_colors(self) -> None:
+        from PyQt5.QtWidgets import QPushButton
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Colours")
+        form = QFormLayout(dlg)
+        labels = {"tree_bg": "Tree &background:", "tree_fg": "Tree &text:",
+                  "article_bg": "&Article background:", "article_fg": "Article te&xt:"}
+
+        def button_for(key):
+            btn = QPushButton()
+
+            def refresh():
+                value = self.pane_colors()[key]
+                btn.setText(value or "Default")
+                pm = QPixmap(14, 14)
+                pm.fill(QColor(value) if value else Qt.transparent)
+                btn.setIcon(QIcon(pm))
+
+            def pick():
+                current = QColor(self.pane_colors()[key] or (
+                    self.tree if key.startswith("tree") else self.editor).palette().color(
+                    QPalette.Base if key.endswith("bg") else QPalette.Text))
+                color = self._pick_color(current, labels[key].replace("&", "").rstrip(":"))
+                if color.isValid():
+                    self.set_pane_color(key, color.name())
+                    refresh()
+            btn.clicked.connect(pick)
+            refresh()
+            return btn, refresh
+
+        refreshers = []
+        for key in COLOR_KEYS:
+            btn, refresh = button_for(key)
+            refreshers.append(refresh)
+            form.addRow(labels[key], btn)
+        buttons = QDialogButtonBox(QDialogButtonBox.Close | QDialogButtonBox.RestoreDefaults)
+        buttons.rejected.connect(dlg.reject)
+
+        def reset():
+            for key in COLOR_KEYS:
+                self.set_pane_color(key, "")
+            for r in refreshers:
+                r()
+        buttons.button(QDialogButtonBox.RestoreDefaults).clicked.connect(reset)
+        form.addRow(buttons)
+        dlg.exec_()
+
+    def _using_portable(self) -> bool:
+        ini = portable.portable_ini()
+        return bool(ini) and os.path.abspath(self.settings.fileName()) == os.path.abspath(ini)
+
+    def set_portable(self, on: bool) -> bool:
+        """Move the settings between the home folder and a file next to the program."""
+        target = os.path.join(portable.program_dir(), portable.INI_NAME)
+        old = self.settings
+        if on:
+            try:
+                open(target, "a").close()
+            except OSError as exc:
+                self.act_portable.blockSignals(True)
+                self.act_portable.setChecked(False)
+                self.act_portable.blockSignals(False)
+                QMessageBox.warning(self, APP_NAME, f"Can't write settings next to the program.\n\n{exc}")
+                return False
+            new = QSettings(target, QSettings.IniFormat)
+        else:
+            new = QSettings(APP_ID, APP_ID)
+        self._save_settings()
+        for key in old.allKeys():
+            new.setValue(key, old.value(key))
+        new.sync()
+        self.settings = new
+        if not on and os.path.exists(target):
+            try:
+                os.remove(target)
+            except OSError:
+                pass
+        where = target if on else "your home folder"
+        self.statusBar().showMessage(f"Settings are now kept in {where}.", 8000)
+        return True
+
     # ================================================================ links
 
     def link_at_cursor(self, cursor=None) -> Optional[str]:
@@ -1977,6 +2302,19 @@ class MainWindow(QMainWindow):
             self.editor.setFocus()
 
     def eventFilter(self, obj, event) -> bool:
+        if event.type() == QEvent.KeyPress and obj in (self.editor, self.tree):
+            key, mods = event.key(), event.modifiers()
+            if key == Qt.Key_F10 and mods == Qt.ShiftModifier:
+                self.show_context_menu(obj)
+                return True
+            if self.act_tab_switch.isChecked():
+                if key == Qt.Key_Tab and mods == Qt.NoModifier:
+                    self.switch_pane()
+                    return True
+                if key == Qt.Key_Tab and mods == Qt.ControlModifier and obj is self.editor:
+                    if not self.read_only:
+                        self.editor.insertPlainText("\t")
+                    return True
         if (obj is self.editor.viewport() and event.type() == QEvent.MouseButtonRelease
                 and event.button() == Qt.LeftButton and event.modifiers() & Qt.ControlModifier):
             link = self.link_at_cursor(self.editor.cursorForPosition(event.pos()))
@@ -2029,8 +2367,13 @@ class MainWindow(QMainWindow):
             self._find_dialog = FindDialog(self)
         return self._find_dialog
 
-    def show_find(self, replace: bool = False) -> None:
-        self.find_dialog().show_dialog(replace)
+    def show_find(self, replace: bool = False, scope: Optional[int] = None) -> None:
+        self.find_dialog().show_dialog(replace, scope)
+
+    def find_here(self) -> None:
+        """Ctrl+F in the article searches this article; in the tree, the whole tree."""
+        from .finddialog import SCOPE_ALL, SCOPE_NODE
+        self.show_find(False, SCOPE_NODE if self.editor.hasFocus() else SCOPE_ALL)
 
     def find_again(self, backward: bool = False) -> None:
         dlg = self.find_dialog()
@@ -2568,8 +2911,17 @@ class MainWindow(QMainWindow):
             "<p>Opens and saves .hjt tree notes files, including backup copies.</p>"
             f"<p><small>Qt {QT_VERSION_STR}</small></p>")
 
+    def _ok_to_close(self) -> bool:
+        mode = next((m for m, a in self.act_close_modes.items() if a.isChecked()), "ask")
+        if mode == "ask":
+            return self.maybe_save()
+        self._commit_editor()
+        if mode == "save" and self.isWindowModified():
+            return self.save()
+        return True
+
     def closeEvent(self, event) -> None:
-        if self.maybe_save():
+        if self._ok_to_close():
             self._watch(None)
             self.disk_timer.stop()
             self.info_timer.stop()

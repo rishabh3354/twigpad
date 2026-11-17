@@ -67,3 +67,65 @@ def add_child() -> QIcon:
 
 def themed(name: str, fallback: QStyle.StandardPixmap) -> QIcon:
     return QIcon.fromTheme(name, QApplication.style().standardIcon(fallback))
+
+
+def _letter(text: str, bold: bool, italic: bool) -> QIcon:
+    from PyQt5.QtGui import QFont
+    pm, p = _canvas()
+    font = QFont("Serif")
+    font.setPixelSize(26)
+    font.setBold(bold)
+    font.setItalic(italic)
+    p.setFont(font)
+    p.setPen(_ink())
+    p.drawText(QRectF(0, 0, SIZE, SIZE), Qt.AlignCenter, text)
+    p.end()
+    return QIcon(pm)
+
+
+def bold() -> QIcon:
+    return _letter("B", True, False)
+
+
+def italic() -> QIcon:
+    return _letter("I", False, True)
+
+
+def cut() -> QIcon:
+    pm, p = _canvas()
+    p.setPen(QPen(_ink(), 2.2, Qt.SolidLine, Qt.RoundCap))
+    p.drawLine(QPointF(9, 3), QPointF(21, 21))     # blades
+    p.drawLine(QPointF(23, 3), QPointF(11, 21))
+    p.setBrush(Qt.NoBrush)
+    p.drawEllipse(QPointF(9, 25), 4.5, 4.5)         # handles
+    p.drawEllipse(QPointF(23, 25), 4.5, 4.5)
+    p.end()
+    return QIcon(pm)
+
+
+def copy() -> QIcon:
+    pm, p = _canvas()
+    _page(p, QRectF(4, 3, 16, 20))
+    _page(p, QRectF(12, 9, 16, 20))
+    p.setPen(QPen(_ink(), 1.5))
+    for y in (15, 19, 23):
+        p.drawLine(QPointF(15, y), QPointF(25, y))
+    p.end()
+    return QIcon(pm)
+
+
+def paste() -> QIcon:
+    pm, p = _canvas()
+    p.setPen(QPen(_ink(), 2))
+    p.setBrush(QColor("#c9a46a"))
+    p.drawRoundedRect(QRectF(5, 5, 22, 25), 2, 2)  # clipboard
+    p.setBrush(QApplication.palette().base())
+    p.drawRoundedRect(QRectF(11, 2, 10, 6), 2, 2)  # clip
+    _page(p, QRectF(9, 11, 14, 15))
+    p.end()
+    return QIcon(pm)
+
+
+def themed_drawn(name: str, drawn) -> QIcon:
+    """The desktop theme's icon, or one drawn here."""
+    return QIcon.fromTheme(name) if QIcon.hasThemeIcon(name) else drawn()

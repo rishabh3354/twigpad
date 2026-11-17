@@ -105,7 +105,9 @@ class FindDialog(QDialog):
 
     # ------------------------------------------------------------- showing
 
-    def show_dialog(self, replace: bool = False) -> None:
+    def show_dialog(self, replace: bool = False, scope: Optional[int] = None) -> None:
+        if scope is not None:
+            self.scope_combo.setCurrentIndex(scope)
         for w in (self.replace_label, self.replace_edit, self.btn_replace, self.btn_replace_all):
             w.setVisible(replace)
         self.setWindowTitle("Replace" if replace else "Find")

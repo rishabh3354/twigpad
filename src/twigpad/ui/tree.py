@@ -51,6 +51,8 @@ class NoteTree(QTreeWidget):
     """
 
     structureChanged = pyqtSignal()
+    # F2, or a slow second click on the selected node, renames it.
+    EDIT_TRIGGERS = QAbstractItemView.EditKeyPressed | QAbstractItemView.SelectedClicked
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -61,7 +63,7 @@ class NoteTree(QTreeWidget):
         self.setAcceptDrops(True)
         self.setDropIndicatorShown(True)
         self.setDragDropMode(QAbstractItemView.InternalMove)
-        self.setEditTriggers(QAbstractItemView.EditKeyPressed)
+        self.setEditTriggers(self.EDIT_TRIGGERS)
         self.setUniformRowHeights(True)
         self.setAnimated(False)
         self.classic = False
@@ -453,6 +455,14 @@ class NoteTree(QTreeWidget):
             item = item.parent()
         return titles[::-1]
 
+    def keyPressEvent(self, event) -> None:
+        # Ctrl+Up / Ctrl+Down scroll the tree without changing the selection.
+        if event.modifiers() == Qt.ControlModifier and event.key() in (Qt.Key_Up, Qt.Key_Down):
+            bar = self.verticalScrollBar()
+            bar.setValue(bar.value() + (-1 if event.key() == Qt.Key_Up else 1) * bar.singleStep())
+            return
+        super().keyPressEvent(event)
+
     # ------------------------------------------------------------ drag & drop
     # Moves are done by hand (take + insert of the same item) so the article
     # text and the expanded state of the subtree travel with the node.
@@ -478,6 +488,12 @@ class NoteTree(QTreeWidget):
         if target is None or pos == QAbstractItemView.OnViewport:
             event.ignore()  # would create a second top node
             return
+        elif pos == QAbstractItemView.OnItem and event.keyboardModifiers() & Qt.ShiftModifier:
+            # Shift+drop on a node: becomes its next sibling.
+            if self.is_view_top(target):
+                event.ignore()
+                return
+            parent, index = target.parent(), self._siblings_parent(target).indexOfChild(target) + 1
         elif pos == QAbstractItemView.OnItem:
             parent, index = target, target.childCount()
         else:

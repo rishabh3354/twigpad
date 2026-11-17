@@ -28,7 +28,11 @@ switch panes). The same commands are in the **Node** menu and on right-click.
 | Ctrl+Shift+S | Sort the subnodes of the selected node by title |
 
 **Node → Sort Whole Tree** sorts every level. You can also drag a node onto
-another node (to put it inside) or between two nodes.
+another node (to put it inside) or between two nodes; hold **Shift** while
+dropping onto a node to put it below that node instead of inside it. A slow
+second click on the selected node renames it, like F2. **Ctrl+Up** and
+**Ctrl+Down** scroll the tree without changing the selection, and
+**Shift+F10** opens the right-click menu of the tree or the article.
 
 More in the **Node** menu:
 
@@ -72,7 +76,14 @@ its first line.
 | Ctrl+H | Follow the link at the cursor |
 | Ctrl+Tab or F6 | Switch between tree and article |
 
-**Edit → Insert → Text from File** inserts a text file at the cursor.
+**Edit → Insert → Text from File** inserts a text file at the cursor;
+**File → Import → Text File into Article (Replace Its Text)** replaces the
+whole article with a file (Ctrl+Z brings the old text back).
+
+**Cut** and **Copy** work on the whole article when nothing is selected.
+**Edit → Delete** deletes the selection, or, with nothing selected, the whole
+article after asking. The article's right-click menu also has Find, Find
+Next and Navigate → Go to Start / Go to End.
 
 The **Format** menu changes the selected text, or the whole article when
 nothing is selected (Ctrl+Z undoes it):
@@ -163,6 +174,11 @@ Debian and Ubuntu or `hunspell-de` on Fedora.
 - Word wrap, and separate fonts for the tree and the article.
 - **Classic Tree Look** switches between the classic tree (folder icons,
   dotted lines, +/- boxes) and your desktop's standard tree style.
+- **Colours** sets the background and text colours of the tree and the
+  article; **Restore Defaults** goes back to your desktop's colours.
+- **Toolbars**: File, Tree Edit, Article Edit, View and Navigate. Turn each
+  on or off here, and drag a toolbar by its handle to move it, also to
+  another side of the window. Twigpad remembers where they are.
 
 ## Links
 
@@ -191,7 +207,9 @@ brackets, select the whole link first, or put it in double quotes.
 | Ctrl+R | Find and replace |
 | F3 / Shift+F3 | Find next / previous |
 
-Search looks in node titles, articles, or both; in all nodes, the selected
+**Ctrl+F** in the article searches the selected node; in the tree it searches
+the whole file (you can change this in the Find window). Search looks in node
+titles, articles, or both; in all nodes, the selected
 branch, or the selected node only. Options: match case, whole words, regular
 expressions. **Find All** lists every match; click one to jump to it.
 **Replace All** reports how many replacements it made.
@@ -230,16 +248,22 @@ expressions. **Find All** lists every match; click one to jump to it.
 
 | Option | Default |
 |---|---|
-| Open last file at startup | On |
+| At Startup: Reopen the Last File, Ask Whether to Reopen It, Show the Quick Start Window (new file, open, or a recent file), or Start With a New File | Reopen |
+| When Closing With Unsaved Changes: Ask Whether to Save, Save Automatically, or Don't Save | Ask |
 | Keep a backup copy (`<file>.hjt.bak`) when saving: the file as it was when you opened it | On |
 | Auto-save every 5 minutes | Off |
 | Automatic Paste: text you copy in other programs is added to the end of the current article (for collecting snippets) | Off, not remembered |
+| Use Tab to Switch Between Tree and Article: Tab switches panes and Ctrl+Tab types a tab in the article | Off |
+| Minimize to Tray Instead of the Taskbar | Off |
+| Keep Settings Next to the Program (see Portable use) | Off |
 
 ### Portable use
 
-To run Twigpad from a USB stick, create an empty file called `twigpad.ini`
-next to the AppImage (or the `twigpad` program). Twigpad then keeps its
-settings in that file instead of your home folder.
+To run Twigpad from a USB stick, turn on **Options → Keep Settings Next to
+the Program**, or create an empty file called `twigpad.ini` next to the
+AppImage (or the `twigpad` program). Twigpad then keeps its settings in that
+file instead of your home folder. Turning the option off moves the settings
+back and deletes the file.
 
 ## Command line
 
