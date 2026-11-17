@@ -14,6 +14,8 @@ import json
 import os
 import tempfile
 import zipfile
+
+from .i18n import tr
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional
 
@@ -96,11 +98,11 @@ def read_manifest(zip_path: str) -> Dict:
         with zipfile.ZipFile(zip_path) as zf:
             manifest = json.loads(zf.read(MANIFEST).decode("utf-8"))
     except (KeyError, zipfile.BadZipFile, ValueError, OSError) as exc:
-        raise BackupError(f"{os.path.basename(zip_path)} is not a Twigpad backup ({exc})") from exc
+        raise BackupError(tr("{name} is not a Twigpad backup ({error})").format(name=os.path.basename(zip_path), error=exc)) from exc
     if manifest.get("format") != FORMAT:
-        raise BackupError(f"{os.path.basename(zip_path)} is not a Twigpad backup")
+        raise BackupError(tr("{name} is not a Twigpad backup").format(name=os.path.basename(zip_path)))
     if manifest.get("version", 0) > VERSION:
-        raise BackupError("This backup was made by a newer Twigpad. Update Twigpad to restore it.")
+        raise BackupError(tr("This backup was made by a newer Twigpad. Update Twigpad to restore it."))
     return manifest
 
 
@@ -163,7 +165,7 @@ def restore_files(zip_path: str, items: Iterable[PlanItem]) -> List[str]:
                 os.makedirs(os.path.dirname(item.target), exist_ok=True)
                 data = zf.read(item.entry.member)
                 if hashlib.sha256(data).hexdigest() != item.entry.sha256:
-                    raise BackupError("the copy in the backup is damaged")
+                    raise BackupError(tr("the copy in the backup is damaged"))
                 fd, tmp = tempfile.mkstemp(prefix=".restore-", dir=os.path.dirname(item.target))
                 with os.fdopen(fd, "wb") as fh:
                     fh.write(data)

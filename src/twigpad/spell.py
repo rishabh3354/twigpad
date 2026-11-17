@@ -16,6 +16,8 @@ import tempfile
 import urllib.request
 from typing import Callable, Dict, List, NamedTuple, Optional
 
+from .i18n import tr
+
 USER_DICT_DIR = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"),
                              "hunspell")
 DICT_DIRS = [
@@ -151,8 +153,30 @@ DOWNLOADS: List[Language] = [Language(*row) for row in (
 _NAMES = {lang.code: lang.name for lang in DOWNLOADS}
 
 
+def _native_name(code: str) -> Optional[str]:
+    """'Deutsch (Österreich)' for de_AT: how the language calls itself."""
+    try:
+        from PyQt5.QtCore import QLocale
+    except ImportError:
+        return None
+    loc = QLocale(code)
+    if loc.language() == QLocale.C or not loc.nativeLanguageName():
+        return None
+    lang = loc.nativeLanguageName()
+    lang = lang[:1].upper() + lang[1:]
+    if "_" in code and loc.nativeCountryName():
+        return f"{lang} ({loc.nativeCountryName()})"
+    return lang
+
+
 def language_name(code: str) -> str:
-    """'English (United Kingdom)' for en_GB; other codes as they are."""
+    """'English (United Kingdom)' for en_GB; other codes as they are. When
+    Twigpad is not in English, each language's own name ('Deutsch (Österreich)')."""
+    from . import i18n
+    if i18n.current != "en":
+        native = _native_name(code)
+        if native:
+            return native
     name = _NAMES.get(code)
     if name:
         return name
@@ -191,7 +215,7 @@ def install_dictionary(lang: Language, progress: Optional[Callable[[int, int], N
         parts[ext] = b"".join(chunks)
     first = parts["dic"].split(b"\n", 1)[0].strip()
     if not parts["aff"] or not first.isdigit():
-        raise OSError(f"The downloaded dictionary for {lang.name} is not valid")
+        raise OSError(tr("The downloaded dictionary for {name} is not valid").format(name=language_name(lang.code)))
     targets = {}
     for ext, data in parts.items():
         fd, tmp = tempfile.mkstemp(prefix=f".{lang.code}-", dir=USER_DICT_DIR)
@@ -237,12 +261,12 @@ class Speller:
     def __init__(self, dic_path: str):
         lib = _load_lib()
         if lib is None:
-            raise OSError("The Hunspell library is not installed")
+            raise OSError(tr("The Hunspell library is not installed"))
         aff = os.path.splitext(dic_path)[0] + ".aff"
         self._lib = lib
         self._h = lib.Hunspell_create(aff.encode(), dic_path.encode())
         if not self._h:
-            raise OSError(f"Could not load the dictionary {dic_path}")
+            raise OSError(tr("Could not load the dictionary {path}").format(path=dic_path))
         enc = (lib.Hunspell_get_dic_encoding(self._h) or b"UTF-8").decode("ascii", "replace")
         self.encoding = {"ISO8859-1": "latin-1", "ISO8859-15": "iso8859-15"}.get(enc, enc)
         self.language = os.path.splitext(os.path.basename(dic_path))[0]

@@ -12,6 +12,8 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from PyQt5.QtWidgets import QTreeWidgetItem
 
+from ..i18n import tr
+
 ROOT = "root"          # key for the tree's top level
 LIMIT = 200            # changes kept in the history
 Attrs = Tuple[str, str, str, str, str]   # title, body, html, icon, color
@@ -149,7 +151,7 @@ class History:
             return
         del self.changes[self.index:]
         top = self.changes[-1] if self.changes else None
-        if (top is not None and change.label == "Rename" and top.label == "Add Node"
+        if (top is not None and change.label == tr("Rename") and top.label == tr("Add Node")
                 and top.current[1] is not None and set(change.attrs) <= {id(top.current[1])}
                 and not change.parents):
             # Typing the name of a node just added: one step, not two.

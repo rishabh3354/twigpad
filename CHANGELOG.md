@@ -92,6 +92,11 @@ All notable changes to Twigpad are listed here. The format follows
   dictionary words are kept).
 - Help → Support the Developer (Donate), More Apps by Warlord Softwares and
   About the Developer; a new About window with the same links.
+- View → Language: menus and windows in English, German, French, Spanish,
+  Italian, Brazilian Portuguese, Russian, Simplified Chinese and Japanese.
+  Automatic (the default) follows the desktop's language; choosing another
+  one offers to restart Twigpad. `--language CODE` picks one for a single
+  start. Qt's own texts (file dialogs) follow too.
 - View → Colours: background and text colours for the tree and the article.
 - Options → At Startup (reopen the last file, ask, Quick Start window, or a
   new file) and When Closing With Unsaved Changes (ask, save, don't save).

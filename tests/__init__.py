@@ -18,3 +18,8 @@ from twigpad import recovery  # noqa: E402
 
 recovery.FOLDER = tempfile.mkdtemp(prefix="twigpad-test-recovery-")
 atexit.register(shutil.rmtree, recovery.FOLDER, True)
+
+# The tests check English texts, whatever language the desktop uses.
+from twigpad import i18n  # noqa: E402
+
+i18n.set_language("en")

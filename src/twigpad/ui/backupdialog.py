@@ -3,6 +3,7 @@
 and bring them back on another computer."""
 from __future__ import annotations
 
+import html
 import os
 import shutil
 import tempfile
@@ -16,11 +17,12 @@ from PyQt5.QtWidgets import (
 
 from .. import APP_NAME, __version__, backup
 from . import popups
+from ..i18n import N_, ntr, tr
 
-SETTINGS_TEXT = "Settings (theme, fonts, toolbars, spelling words, recent files)"
-STATUS_TEXT = {backup.NEW: "Will be restored",
-               backup.SAME: "Already there, skipped",
-               backup.EXISTS: "A different file is already there, skipped"}
+SETTINGS_TEXT = N_("Settings (theme, fonts, toolbars, spelling words, recent files)")
+STATUS_TEXT = {backup.NEW: N_("Will be restored"),
+               backup.SAME: N_("Already there, skipped"),
+               backup.EXISTS: N_("A different file is already there, skipped")}
 
 
 def restore_folder() -> str:
@@ -41,39 +43,39 @@ class BackupDialog(QDialog):
 
     def __init__(self, window, files: List[str]):
         super().__init__(window)
-        self.setWindowTitle("Back Up Notes and Settings")
+        self.setWindowTitle(tr("Back Up Notes and Settings"))
         lay = QVBoxLayout(self)
         lay.setContentsMargins(20, 18, 20, 14)
         lay.setSpacing(10)
-        head = QLabel("<b>Make a backup to move to a new computer.</b><br>"
+        head = QLabel(tr("<b>Make a backup to move to a new computer.</b><br>"
                       "Everything goes into one .zip file. Copy it to the new computer and use "
-                      "<i>File → Backup &amp; Restore → Restore from Backup</i> there.")
+                      "<i>File → Backup &amp; Restore → Restore from Backup</i> there."))
         head.setWordWrap(True)
         lay.addWidget(head)
-        lay.addWidget(QLabel("Notes files:"))
+        lay.addWidget(QLabel(tr("Notes files:")))
         self.list = QListWidget()
         self.list.setObjectName("backup-files")
         for path in files:
-            row = QListWidgetItem(f"{os.path.basename(path)}    —    {_home_short(os.path.dirname(path))}")
+            row = QListWidgetItem(tr("{name}    —    {home_short}").format(name=os.path.basename(path), home_short=_home_short(os.path.dirname(path))))
             row.setData(Qt.UserRole, path)
             row.setToolTip(path)
             row.setFlags(row.flags() | Qt.ItemIsUserCheckable)
             row.setCheckState(Qt.Checked)
             self.list.addItem(row)
         if not files:
-            row = QListWidgetItem("(no notes files saved yet)")
+            row = QListWidgetItem(tr("(no notes files saved yet)"))
             row.setFlags(Qt.NoItemFlags)
             self.list.addItem(row)
         self.list.setMinimumHeight(150)
         lay.addWidget(self.list)
-        self.settings_box = QCheckBox(SETTINGS_TEXT)
+        self.settings_box = QCheckBox(tr(SETTINGS_TEXT))
         self.settings_box.setChecked(True)
         lay.addWidget(self.settings_box)
-        hint = QLabel("Password-protected files stay protected in the backup.")
+        hint = QLabel(tr("Password-protected files stay protected in the backup."))
         hint.setObjectName("hint")
         lay.addWidget(hint)
         buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
-        self.ok = buttons.addButton("Back Up...", QDialogButtonBox.AcceptRole)
+        self.ok = buttons.addButton(tr("Back Up..."), QDialogButtonBox.AcceptRole)
         self.ok.setObjectName("accent")
         self.ok.setDefault(True)
         buttons.accepted.connect(self.accept)
@@ -95,24 +97,22 @@ class RestoreDialog(QDialog):
 
     def __init__(self, window, zip_path: str, plan: List[backup.PlanItem], has_settings: bool):
         super().__init__(window)
-        self.setWindowTitle("Restore from Backup")
+        self.setWindowTitle(tr("Restore from Backup"))
         lay = QVBoxLayout(self)
         lay.setContentsMargins(20, 18, 20, 14)
         lay.setSpacing(10)
         new = sum(1 for item in plan if item.status == backup.NEW)
-        head = QLabel(f"<b>{os.path.basename(zip_path)}</b><br>"
-                      f"{new} of {len(plan)} notes file{'s' if len(plan) != 1 else ''} will be restored. "
-                      "Files that are already on this computer are left as they are.")
+        head = QLabel("<b>{}</b><br>{} {}".format(html.escape(os.path.basename(zip_path)), tr("Notes files to restore: {new} of {count}.").format(new=new, count=len(plan)), tr("Files that are already on this computer are left as they are.")))
         head.setWordWrap(True)
         lay.addWidget(head)
         self.table = QTreeWidget()
         self.table.setObjectName("restore-files")
-        self.table.setHeaderLabels(["File", "Restore to", "Status"])
+        self.table.setHeaderLabels([tr("File"), tr("Restore to"), tr("Status")])
         self.table.setRootIsDecorated(False)
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
         for item in plan:
             row = QTreeWidgetItem([os.path.basename(item.entry.original),
-                                   _home_short(os.path.dirname(item.target)), STATUS_TEXT[item.status]])
+                                   _home_short(os.path.dirname(item.target)), tr(STATUS_TEXT[item.status])])
             row.setToolTip(1, item.target)
             row.setToolTip(0, item.entry.original)
             if item.status != backup.NEW:
@@ -125,12 +125,12 @@ class RestoreDialog(QDialog):
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.table.setMinimumHeight(160)
         lay.addWidget(self.table)
-        self.settings_box = QCheckBox(SETTINGS_TEXT)
+        self.settings_box = QCheckBox(tr(SETTINGS_TEXT))
         self.settings_box.setChecked(has_settings)
         self.settings_box.setEnabled(has_settings)
         lay.addWidget(self.settings_box)
         buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
-        self.ok = buttons.addButton("Restore", QDialogButtonBox.AcceptRole)
+        self.ok = buttons.addButton(tr("Restore"), QDialogButtonBox.AcceptRole)
         self.ok.setObjectName("accent")
         self.ok.setDefault(True)
         self.ok.setEnabled(bool(new) or has_settings)
@@ -169,10 +169,10 @@ def make_backup(window, zip_path: str, files: List[str], with_settings: bool) ->
 def run_backup(window, zip_path: Optional[str] = None) -> bool:
     if window.isWindowModified() and window.path:
         answer = popups.show(
-            window, popups.QUESTION, "Save before backing up?",
-            "The open file has changes that are not saved yet. Save them so the backup has them.",
-            (("skip", "Back Up Without Them", popups.NORMAL), ("cancel", "Cancel", popups.CANCEL),
-             ("save", "Save", popups.PRIMARY)), "save")
+            window, popups.QUESTION, tr("Save before backing up?"),
+            tr("The open file has changes that are not saved yet. Save them so the backup has them."),
+            (("skip", tr("Back Up Without Them"), popups.NORMAL), ("cancel", tr("Cancel"), popups.CANCEL),
+             ("save", tr("Save"), popups.PRIMARY)), "save")
         if answer == "cancel" or answer is None or (answer == "save" and not window.save()):
             return False
     dlg = BackupDialog(window, backup_candidates(window))
@@ -180,7 +180,7 @@ def run_backup(window, zip_path: Optional[str] = None) -> bool:
         if dlg.exec_() != QDialog.Accepted:
             return False
         start = os.path.join(os.path.expanduser("~"), backup.default_name())
-        zip_path, _ = QFileDialog.getSaveFileName(window, "Save Backup As", start, "Backup (*.zip)")
+        zip_path, _ = QFileDialog.getSaveFileName(window, tr("Save Backup As"), start, tr("Backup") + " (*.zip)")
         if not zip_path:
             return False
         if not zip_path.lower().endswith(".zip"):
@@ -189,14 +189,19 @@ def run_backup(window, zip_path: Optional[str] = None) -> bool:
     try:
         saved = make_backup(window, zip_path, files, with_settings)
     except OSError as exc:
-        popups.error(window, "Could not make the backup", f"\"{zip_path}\" could not be written.",
+        popups.error(window, tr("Could not make the backup"), tr("\"{zip_path}\" could not be written.").format(zip_path=zip_path),
                      details=str(exc))
         return False
-    what = f"{len(saved)} notes file{'s' if len(saved) != 1 else ''}" + (" and your settings" if with_settings else "")
-    popups.success(window, "Backup saved",
-                   f"{what} are in \"{zip_path}\". Copy this file to your new computer and restore it "
-                   f"there with File → Backup & Restore → Restore from Backup.")
-    window.statusBar().showMessage(f"Backup saved to {zip_path}", 8000)
+    if with_settings:
+        what = ntr("{n} notes file and your settings are in “{zip_path}”.",
+                   "{n} notes files and your settings are in “{zip_path}”.", len(saved))
+    else:
+        what = ntr("{n} notes file is in “{zip_path}”.", "{n} notes files are in “{zip_path}”.", len(saved))
+    popups.success(window, tr("Backup saved"),
+                   what.format(n=len(saved), zip_path=zip_path) + " " +
+                   tr("Copy this file to your new computer and restore it there with "
+                      "File → Backup & Restore → Restore from Backup."))
+    window.statusBar().showMessage(tr("Backup saved to {zip_path}").format(zip_path=zip_path), 8000)
     return True
 
 
@@ -216,15 +221,15 @@ def apply_settings(window, ini: str, fix_path) -> None:
 
 def run_restore(window, zip_path: Optional[str] = None, confirm: bool = True) -> Optional[List[backup.PlanItem]]:
     if zip_path is None:
-        zip_path, _ = QFileDialog.getOpenFileName(window, "Restore from Backup", os.path.expanduser("~"),
-                                                  "Twigpad backup (*.zip)")
+        zip_path, _ = QFileDialog.getOpenFileName(window, tr("Restore from Backup"), os.path.expanduser("~"),
+                                                  tr("Twigpad backup") + " (*.zip)")
         if not zip_path:
             return None
     try:
         manifest = backup.read_manifest(zip_path)
         plan = backup.plan(zip_path, restore_folder())
     except backup.BackupError as exc:
-        popups.error(window, "This is not a Twigpad backup", str(exc))
+        popups.error(window, tr("This is not a Twigpad backup"), str(exc))
         return None
     has_settings = bool(manifest.get("settings"))
     with_settings = has_settings
@@ -245,14 +250,13 @@ def run_restore(window, zip_path: Optional[str] = None, confirm: bool = True) ->
             shutil.rmtree(tmp, ignore_errors=True)
     restored = [item for item in plan if item.status == backup.NEW and os.path.exists(item.target)]
     skipped = len(plan) - len(restored) - len(errors)
-    lines = [f"{len(restored)} notes file{'s' if len(restored) != 1 else ''} restored."]
+    lines = [ntr("{n} notes file restored.", "{n} notes files restored.", len(restored)).format(n=len(restored))]
     if skipped:
-        lines.append(f"{skipped} {'were' if skipped != 1 else 'was'} already on this computer and left as "
-                     f"{'they were' if skipped != 1 else 'it was'}.")
+        lines.append(tr("Already on this computer and left as they were: {n}.").format(n=skipped))
     if with_settings:
-        lines.append("Your settings were restored.")
+        lines.append(tr("Your settings were restored."))
     if errors:
-        popups.warning(window, "Some files could not be restored", " ".join(lines), details="\n".join(errors))
+        popups.warning(window, tr("Some files could not be restored"), " ".join(lines), details="\n".join(errors))
     else:
-        popups.success(window, "Restore finished", " ".join(lines))
+        popups.success(window, tr("Restore finished"), " ".join(lines))
     return plan

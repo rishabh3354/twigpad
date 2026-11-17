@@ -9,6 +9,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QDockWidget, QLabel, QListWidget, QListWidgetItem, QSplitter, QVBoxLayout, QWidget,
 )
+from ..i18n import ntr, tr
 
 NOTE_ROLE = Qt.UserRole
 
@@ -42,7 +43,7 @@ class BacklinksPanel(QDockWidget):
     noteActivated = pyqtSignal(object)
 
     def __init__(self, parent=None):
-        super().__init__("Backlinks", parent)
+        super().__init__(tr("Backlinks"), parent)
         self.setObjectName("backlinks-panel")
         self.list = _NoteList()
         self.list.noteActivated.connect(self.noteActivated)
@@ -63,22 +64,22 @@ class BacklinksPanel(QDockWidget):
             self.label.setText("")
         elif notes:
             n = len(notes)
-            self.label.setText(f"{n} note{'s link' if n != 1 else ' links'} to “{title}”:")
+            self.label.setText(ntr("{n} note links to “{title}”:", "{n} notes link to “{title}”:", n).format(n=n, title=title))
         else:
-            self.label.setText(f"No notes link to “{title}”.")
+            self.label.setText(tr("No notes link to “{title}”.").format(title=title))
 
 
 class TagsPanel(QDockWidget):
     noteActivated = pyqtSignal(object)
 
     def __init__(self, parent=None):
-        super().__init__("Tags", parent)
+        super().__init__(tr("Tags"), parent)
         self.setObjectName("tags-panel")
         self.tag_list = QListWidget()
         self.tag_list.currentItemChanged.connect(self._show_tag)
         self.notes = _NoteList()
         self.notes.noteActivated.connect(self.noteActivated)
-        self.empty = QLabel("Type #tag in any note, for example #todo or #work-project.")
+        self.empty = QLabel(tr("Type #tag in any note, for example #todo or #work-project."))
         self.empty.setWordWrap(True)
         self.empty.setContentsMargins(4, 2, 4, 2)
         split = QSplitter(Qt.Vertical)
@@ -103,7 +104,7 @@ class TagsPanel(QDockWidget):
         select = None
         for key in sorted(groups):
             name, notes = groups[key]
-            row = QListWidgetItem(f"#{name}  ({len(notes)})")
+            row = QListWidgetItem(tr("#{name}  ({count})").format(name=name, count=len(notes)))
             row.setData(NOTE_ROLE, key)
             self.tag_list.addItem(row)
             if key == keep:

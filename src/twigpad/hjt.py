@@ -30,6 +30,7 @@ import tempfile
 import zipfile
 from typing import List, Optional, Tuple
 
+from .i18n import tr
 from .model import Document, Node
 from .rtf import looks_like_rtf, rtf_to_text
 
@@ -86,7 +87,7 @@ def parse(text: str) -> Document:
     while i < n and not lines[i].strip():
         i += 1
     if i >= n:
-        raise HjtFormatError("The file is empty.")
+        raise HjtFormatError(tr("The file is empty."))
 
     m = _HEADER.match(lines[i].strip())
     if m:
@@ -95,8 +96,8 @@ def parse(text: str) -> Document:
     else:
         first = lines[i].strip().lower()
         if not (first == "<node>" or first.startswith("dt=")):
-            raise HjtFormatError("This is not a tree notes (.hjt) file.")
-        warnings.append("File has no version header; read it as an old-format file.")
+            raise HjtFormatError(tr("This is not a tree notes (.hjt) file."))
+        warnings.append(tr("File has no version header; read it as an old-format file."))
 
     # Files with the magic end marker must use it, so an article line that
     # happens to read "<end node>" does not cut the article short.
@@ -124,7 +125,7 @@ def parse(text: str) -> Document:
             line = lines[i]
 
         if line.strip().lower() != "<node>":
-            warnings.append(f"Line {i + 1}: unexpected text outside a node was skipped.")
+            warnings.append(tr("Line {line}: unexpected text outside a node was skipped.").format(line=i + 1))
             i += 1
             continue
         i += 1
@@ -137,7 +138,7 @@ def parse(text: str) -> Document:
             level = int(level_line)
             i += 1
         except ValueError:
-            warnings.append(f"Line {i + 1}: node '{title}' has no valid level; placed at top level.")
+            warnings.append(tr("Line {line}: node “{title}” has no valid level; placed at top level.").format(line=i + 1, title=title))
             level = 0
             # Do not consume: the line belongs to the article.
 
@@ -146,7 +147,7 @@ def parse(text: str) -> Document:
             body.append(lines[i])
             i += 1
         if i >= n:
-            warnings.append(f"Node '{title}' is not closed (file may be truncated); recovered its text.")
+            warnings.append(tr("Node “{title}” is not closed (file may be truncated); recovered its text.").format(title=title))
             # A truncated file usually ends with an empty line from the split.
             while body and body[-1] == "":
                 body.pop()
@@ -157,7 +158,7 @@ def parse(text: str) -> Document:
         if dtype.lower() == "rtf" or looks_like_rtf(article):
             article = rtf_to_text(article)
             if dtype.lower() != "text":
-                warnings.append(f"Node '{title}': formatted (RTF) article converted to plain text.")
+                warnings.append(tr("Node “{title}”: formatted (RTF) article converted to plain text.").format(title=title))
         flat.append((level, title, article, dtype))
 
     _build_tree(doc, flat)
@@ -171,7 +172,7 @@ def _build_tree(doc: Document, flat: List[Tuple[int, str, str, str]]) -> None:
             level = 0
         if level > len(stack) - 1:
             doc.warnings.append(
-                f"Node '{title}' skipped levels ({level}); attached to the nearest parent.")
+                tr("Node “{title}” skipped levels ({level}); attached to the nearest parent.").format(title=title, level=level))
             level = len(stack) - 1
         parent = stack[level]
         node = parent.add_child(Node(title=title, text=article))
@@ -199,9 +200,9 @@ def _load_zip(data: bytes, name: str) -> Document:
                 doc = load_bytes(zf.read(member), member)
             except HjtFormatError:
                 continue
-            doc.warnings.insert(0, f"Loaded '{member}' from archive '{os.path.basename(name)}'.")
+            doc.warnings.insert(0, tr("Loaded “{member}” from archive “{archive}”.").format(member=member, archive=os.path.basename(name)))
             return doc
-    raise HjtFormatError("The archive contains no tree notes (.hjt) file.")
+    raise HjtFormatError(tr("The archive contains no tree notes (.hjt) file."))
 
 
 def load(path: str) -> Document:

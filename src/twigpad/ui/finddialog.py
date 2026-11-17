@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
 
 from .. import search
 from ..search import TEXT, TITLE, Match
+from ..i18n import ntr, tr
 
 SCOPE_ALL, SCOPE_SUBTREE, SCOPE_NODE = range(3)
 MAX_RESULTS = 2000
@@ -23,37 +24,37 @@ class FindDialog(QDialog):
     def __init__(self, win):
         super().__init__(win)
         self.win = win
-        self.setWindowTitle("Find and Replace")
+        self.setWindowTitle(tr("Find and Replace"))
         self.last_match: Optional[Match] = None
         self.scope_root = None
         self._results: List[Match] = []
 
         self.find_edit = QLineEdit()
-        self.find_edit.setPlaceholderText("Text to find")
+        self.find_edit.setPlaceholderText(tr("Text to find"))
         self.replace_edit = QLineEdit()
-        self.replace_edit.setPlaceholderText("Replace with")
-        self.replace_label = QLabel("Re&place with:")
+        self.replace_edit.setPlaceholderText(tr("Replace with"))
+        self.replace_label = QLabel(tr("Re&place with:"))
         self.replace_label.setBuddy(self.replace_edit)
-        find_label = QLabel("Fi&nd what:")
+        find_label = QLabel(tr("Fi&nd what:"))
         find_label.setBuddy(self.find_edit)
 
-        self.case_box = QCheckBox("Match &case")
-        self.word_box = QCheckBox("&Whole words only")
-        self.regex_box = QCheckBox("Regular e&xpression")
-        self.titles_box = QCheckBox("Node &titles")
-        self.text_box = QCheckBox("&Articles")
+        self.case_box = QCheckBox(tr("Match &case"))
+        self.word_box = QCheckBox(tr("&Whole words only"))
+        self.regex_box = QCheckBox(tr("Regular e&xpression"))
+        self.titles_box = QCheckBox(tr("Node &titles"))
+        self.text_box = QCheckBox(tr("&Articles"))
         self.titles_box.setChecked(True)
         self.text_box.setChecked(True)
         self.scope_combo = QComboBox()
-        self.scope_combo.addItems(["All nodes", "Selected node and its subnodes", "Selected node only"])
+        self.scope_combo.addItems([tr("All nodes"), tr("Selected node and its subnodes"), tr("Selected node only")])
         self.scope_combo.currentIndexChanged.connect(self._capture_scope)
 
-        self.btn_next = QPushButton("Find &Next")
-        self.btn_prev = QPushButton("Find Pre&vious")
-        self.btn_all = QPushButton("Find A&ll")
-        self.btn_replace = QPushButton("&Replace")
-        self.btn_replace_all = QPushButton("Replace &All")
-        close = QPushButton("Close")
+        self.btn_next = QPushButton(tr("Find &Next"))
+        self.btn_prev = QPushButton(tr("Find Pre&vious"))
+        self.btn_all = QPushButton(tr("Find A&ll"))
+        self.btn_replace = QPushButton(tr("&Replace"))
+        self.btn_replace_all = QPushButton(tr("Replace &All"))
+        close = QPushButton(tr("Close"))
         self.btn_next.setDefault(True)
         self.btn_next.clicked.connect(lambda: self.find(backward=False))
         self.btn_prev.clicked.connect(lambda: self.find(backward=True))
@@ -73,13 +74,13 @@ class FindDialog(QDialog):
         grid.addWidget(self.find_edit, 0, 1)
         grid.addWidget(self.replace_label, 1, 0)
         grid.addWidget(self.replace_edit, 1, 1)
-        grid.addWidget(QLabel("Search in:"), 2, 0)
+        grid.addWidget(QLabel(tr("Search in:")), 2, 0)
         look = QHBoxLayout()
         look.addWidget(self.titles_box)
         look.addWidget(self.text_box)
         look.addStretch()
         grid.addLayout(look, 2, 1)
-        grid.addWidget(QLabel("Nodes:"), 3, 0)
+        grid.addWidget(QLabel(tr("Nodes:")), 3, 0)
         grid.addWidget(self.scope_combo, 3, 1)
         opts = QHBoxLayout()
         opts.addWidget(self.case_box)
@@ -110,7 +111,7 @@ class FindDialog(QDialog):
             self.scope_combo.setCurrentIndex(scope)
         for w in (self.replace_label, self.replace_edit, self.btn_replace, self.btn_replace_all):
             w.setVisible(replace)
-        self.setWindowTitle("Replace" if replace else "Find")
+        self.setWindowTitle(tr("Replace") if replace else tr("Find"))
         selected = self.win.editor.textCursor().selectedText()
         if selected and " " not in selected:
             self.find_edit.setText(selected)
@@ -134,7 +135,7 @@ class FindDialog(QDialog):
         except ValueError as exc:
             self.status.setText(str(exc))
         except re.error as exc:
-            self.status.setText(f"Invalid regular expression: {exc}")
+            self.status.setText(tr("Invalid regular expression: {exc}").format(exc=exc))
         return None
 
     def _items(self) -> list:
@@ -193,13 +194,12 @@ class FindDialog(QDialog):
         m, wrapped = search.find_next(items, pattern, self._anchor(items, backward),
                                       titles, text, backward)
         if m is None:
-            self.status.setText(f"\"{self.find_edit.text()}\" was not found.")
+            self.status.setText(tr("\"{text}\" was not found.").format(text=self.find_edit.text()))
             self.last_match = None
             return None
         self.show_match(m)
-        where = "title" if m.field == TITLE else "article"
-        self.status.setText(f"Found in the {where} of \"{m.item.title}\"."
-                            + ("  (Search wrapped around.)" if wrapped else ""))
+        found = tr("Found in the title of “{title}”.") if m.field == TITLE else tr("Found in the article of “{title}”.")
+        self.status.setText(found.format(title=m.item.title) + (("  " + tr("(Search wrapped around.)")) if wrapped else ""))
         return m
 
     def find_all(self) -> int:
@@ -224,7 +224,7 @@ class FindDialog(QDialog):
         n = len(self._results)
         nodes = len({id(m.item) for m in self._results})
         more = f" (showing the first {MAX_RESULTS})" if n >= MAX_RESULTS else ""
-        self.status.setText(f"{n} match{'es' if n != 1 else ''} in {nodes} node{'s' if nodes != 1 else ''}{more}.")
+        self.status.setText((ntr("{n} match", "{n} matches", n).format(n=n) + " " + ntr("in {nodes} node", "in {nodes} nodes", nodes).format(nodes=nodes) + more + "."))
         self.results.setVisible(n > 0)
         if n and self.height() < 420:
             self.resize(self.width(), 420)
@@ -269,7 +269,7 @@ class FindDialog(QDialog):
         pattern = self._pattern()
         if pattern is None or self.win.read_only:
             return 0
-        with self.win.tree.recording("Replace All"):
+        with self.win.tree.recording(tr("Replace All")):
             return self._replace_all(pattern)
 
     def _replace_all(self, pattern) -> int:
@@ -312,8 +312,7 @@ class FindDialog(QDialog):
         if total:
             win.setWindowModified(True)
         self.last_match = None
-        self.status.setText(f"Replaced {total} occurrence{'s' if total != 1 else ''} "
-                            f"in {nodes} node{'s' if nodes != 1 else ''}.")
+        self.status.setText((ntr("Replaced {n} occurrence", "Replaced {n} occurrences", total).format(n=total) + " " + ntr("in {nodes} node", "in {nodes} nodes", nodes).format(nodes=nodes) + "."))
         return total
 
     def keyPressEvent(self, event) -> None:

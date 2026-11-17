@@ -8,6 +8,7 @@ from typing import Optional
 from PyQt5.QtCore import QPointF, QRect, QRectF, QSize, Qt
 from PyQt5.QtGui import QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap
 from PyQt5.QtWidgets import QLineEdit, QStyle, QStyledItemDelegate, QStyleOptionViewItem
+from ..i18n import N_, tr
 
 ICON = 16          # folder icon size (logical pixels)
 GAP = 3            # space between connector line, icon and text
@@ -19,21 +20,21 @@ FOLDER_COLOR = "#f7bd46"
 
 # Note icons: name -> (menu label, default colour).
 NOTE_ICONS = {
-    "": ("Folder", FOLDER_COLOR),
-    "page": ("Page", "#5b6b7f"),
-    "star": ("Star", "#f2b01e"),
-    "flag": ("Flag", "#d83b2d"),
-    "check": ("Done", "#2e9a4b"),
-    "warning": ("Important", "#f0a30a"),
-    "info": ("Information", "#2f6fd6"),
-    "heart": ("Heart", "#e0405e"),
-    "bookmark": ("Bookmark", "#7b52c7"),
-    "idea": ("Idea", "#e6c229"),
+    "": (N_("Folder"), FOLDER_COLOR),
+    "page": (N_("Page"), "#5b6b7f"),
+    "star": (N_("Star"), "#f2b01e"),
+    "flag": (N_("Flag"), "#d83b2d"),
+    "check": (N_("Done"), "#2e9a4b"),
+    "warning": (N_("Important"), "#f0a30a"),
+    "info": (N_("Information"), "#2f6fd6"),
+    "heart": (N_("Heart"), "#e0405e"),
+    "bookmark": (N_("Bookmark"), "#7b52c7"),
+    "idea": (N_("Idea"), "#e6c229"),
 }
 # Colours offered for note titles and icons: name -> colour.
 NOTE_COLORS = {
-    "Red": "#c0392b", "Orange": "#d35400", "Yellow": "#b7950b", "Green": "#1e8449",
-    "Teal": "#117a65", "Blue": "#1f5fbf", "Purple": "#7d3c98", "Grey": "#707b7c",
+    N_("Red"): "#c0392b", N_("Orange"): "#d35400", N_("Yellow"): "#b7950b", N_("Green"): "#1e8449",
+    N_("Teal"): "#117a65", N_("Blue"): "#1f5fbf", N_("Purple"): "#7d3c98", N_("Grey"): "#707b7c",
 }
 _note_icons: dict = {}
 
@@ -359,7 +360,7 @@ class TreeDelegate(QStyledItemDelegate):
         return editor
 
     def setModelData(self, editor, model, index) -> None:
-        with self.tree.recording("Rename"):   # so a rename can be undone
+        with self.tree.recording(tr("Rename")):   # so a rename can be undone
             super().setModelData(editor, model, index)
 
     def updateEditorGeometry(self, editor, option, index) -> None:

@@ -8,6 +8,8 @@ convert to and from Qt text positions (which count UTF-16 units).
 from __future__ import annotations
 
 import re
+
+from .i18n import tr
 from dataclasses import dataclass
 from typing import Iterator, Optional, Sequence, Tuple
 
@@ -31,7 +33,7 @@ def compile_pattern(query: str, match_case: bool = False, whole_word: bool = Fal
                     regex: bool = False) -> "re.Pattern[str]":
     """Raises ``ValueError`` for an empty query and ``re.error`` for a bad regex."""
     if not query:
-        raise ValueError("Nothing to search for.")
+        raise ValueError(tr("Nothing to search for."))
     body = query if regex else re.escape(query)
     if whole_word:
         body = rf"(?<!\w)(?:{body})(?!\w)"

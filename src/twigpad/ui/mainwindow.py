@@ -9,7 +9,8 @@ import zipfile
 from typing import List, Optional
 
 from PyQt5.QtCore import (
-    QDateTime, QEvent, QFileSystemWatcher, QLocale, QMimeData, QSettings, QSize, Qt, QTimer, QUrl,
+    QDateTime, QEvent, QFileSystemWatcher, QLocale, QMimeData, QProcess, QProcessEnvironment, QSettings, QSize, Qt,
+    QTimer, QUrl,
 )
 from PyQt5.QtGui import (
     QColor, QDesktopServices, QPalette, QFont, QIcon, QImage, QKeySequence, QPixmap, QTextBlockFormat,
@@ -23,7 +24,7 @@ from PyQt5.QtWidgets import (
 )
 
 from .. import (
-    APP_ID, APP_NAME, __version__, developer, export, hjt, importers, links, portable, recovery, search, spell,
+    APP_ID, APP_NAME, __version__, desktop, developer, export, hjt, importers, links, portable, recovery, search, spell,
     tags, textfmt, twig,
 )
 from ..model import Document, Node
@@ -34,30 +35,51 @@ from .treesearch import TreeSearchDialog
 from .highlighter import ArticleHighlighter
 from .panels import BacklinksPanel, TagsPanel
 from .tree import NoteItem, NoteTree, short
+from .. import i18n
+from ..i18n import N_, ntr, tr
 
-FILE_FILTERS = (
-    "Notes files and backups (*.twig *.hjt *.HJT *.bak *.BAK *.hjt~ *.zip);;"
-    "Twigpad notes (*.twig);;"
-    "Tree notes (*.hjt *.HJT);;"
-    "All files (*)"
-)
-TWIG_FILTER = "Twigpad notes (*.twig)"
-HJT_FILTER = "Tree notes (*.hjt)"
+def _filters(*pairs: tuple) -> str:
+    """File dialog filters: (name, patterns) pairs, the names translated."""
+    return ";;".join(f"{tr(name)} ({patterns})" for name, patterns in pairs)
+
+
+ALL_FILES = (N_("All files"), "*")
+
+
+def file_filters() -> str:
+    return _filters((N_("Notes files and backups"), "*.twig *.hjt *.HJT *.bak *.BAK *.hjt~ *.zip"),
+                    (N_("Twigpad notes"), "*.twig"), (N_("Tree notes"), "*.hjt *.HJT"), ALL_FILES)
+
+
+def twig_filter() -> str:
+    return _filters((N_("Twigpad notes"), "*.twig"))
+
+
+def hjt_filter() -> str:
+    return _filters((N_("Tree notes"), "*.hjt"))
+
+
+def image_filters() -> str:
+    return _filters((N_("Images"), "*.png *.jpg *.jpeg *.gif *.bmp *.webp"), ALL_FILES)
+
+
+def text_filters() -> str:
+    return _filters((N_("Text files"), "*.txt *.text *.md *.log"), ALL_FILES)
+
+
 OWN_EXTS = (".hjt", ".twig")
-IMAGE_FILTERS = "Images (*.png *.jpg *.jpeg *.gif *.bmp *.webp);;All files (*)"
-TEXT_FILTERS = "Text files (*.txt *.text *.md *.log);;All files (*)"
 VIEW_MODES = ("both", "tree", "article")
-STARTUP_MODES = {"reopen": "&Reopen the Last File", "ask": "&Ask Whether to Reopen the Last File",
-                 "quickstart": "Show the &Quick Start Window", "new": "Start With a &New File"}
-CLOSE_MODES = {"ask": "&Ask Whether to Save", "save": "&Save Automatically",
-               "discard": "&Don't Save (not recommended)"}
+STARTUP_MODES = {"reopen": N_("&Reopen the Last File"), "ask": N_("&Ask Whether to Reopen the Last File"),
+                 "quickstart": N_("Show the &Quick Start Window"), "new": N_("Start With a &New File")}
+CLOSE_MODES = {"ask": N_("&Ask Whether to Save"), "save": N_("&Save Automatically"),
+               "discard": N_("&Don't Save (not recommended)")}
 COLOR_KEYS = ("tree_bg", "tree_fg", "article_bg", "article_fg")
-TOOLBAR_ICON_SIZES = {"&Small": 16, "&Medium": 20, "&Large": 24, "&Extra Large": 32}
+TOOLBAR_ICON_SIZES = {N_("&Small"): 16, N_("&Medium"): 20, N_("&Large"): 24, N_("&Extra Large"): 32}
 DEFAULT_TOOLBAR_ICON_SIZE = 24
-TOOLBAR_LABELS = {"icons": ("&Icons Only", Qt.ToolButtonIconOnly),
-                  "beside": ("Text &Beside Icons", Qt.ToolButtonTextBesideIcon),
-                  "under": ("Text &Under Icons", Qt.ToolButtonTextUnderIcon)}
-TREE_ICON_SIZES = {"&Small": 16, "&Medium": 20, "&Large": 24, "&Extra Large": 32}
+TOOLBAR_LABELS = {"icons": (N_("&Icons Only"), Qt.ToolButtonIconOnly),
+                  "beside": (N_("Text &Beside Icons"), Qt.ToolButtonTextBesideIcon),
+                  "under": (N_("Text &Under Icons"), Qt.ToolButtonTextUnderIcon)}
+TREE_ICON_SIZES = TOOLBAR_ICON_SIZES
 ZOOM_RANGE = (-6, 24)   # points added to the chosen font size
 NEW_FILE_TITLE = "Notes"
 NODE_MIME = "application/x-twigpad-notes"
@@ -67,7 +89,9 @@ AUTOSAVE_MINUTES = 5
 
 def _and_list(words: List[str]) -> str:
     """'a', 'a and b', 'a, b and c'."""
-    return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
+    if len(words) == 1:
+        return words[0]
+    return tr("{items} and {last}").format(items=", ".join(words[:-1]), last=words[-1])
 
 
 class MainWindow(QMainWindow):
@@ -158,6 +182,9 @@ class MainWindow(QMainWindow):
 
         self._create_actions()
         self._create_menus()
+        for a in self.menuBar().actions():
+            if a.menu() is not None:
+                self._fit_menus(a.menu())
         self._create_toolbar()
         self._create_statusbar()
 
@@ -211,135 +238,135 @@ class MainWindow(QMainWindow):
         t, e = self.tree, self.editor
 
         # File
-        self.act_new = self._action("&New", self.new_file, QKeySequence.New,
-                                    icons.themed("document-new", S.SP_FileIcon), "Start a new file")
-        self.act_open = self._action("&Open...", self.open_file, QKeySequence.Open,
+        self.act_new = self._action(tr("&New"), self.new_file, QKeySequence.New,
+                                    icons.themed("document-new", S.SP_FileIcon), tr("Start a new file"))
+        self.act_open = self._action(tr("&Open..."), self.open_file, QKeySequence.Open,
                                      icons.themed("document-open", S.SP_DialogOpenButton),
-                                     "Open a tree notes file or a backup")
-        self.act_save = self._action("&Save", self.save, QKeySequence.Save,
-                                     icons.themed("document-save", S.SP_DialogSaveButton), "Save the file")
-        self.act_save_as = self._action("Save &As...", self.save_as, "Ctrl+Alt+S",
-                                        tip="Save under a new name")
+                                     tr("Open a tree notes file or a backup"))
+        self.act_save = self._action(tr("&Save"), self.save, QKeySequence.Save,
+                                     icons.themed("document-save", S.SP_DialogSaveButton), tr("Save the file"))
+        self.act_save_as = self._action(tr("Save &As..."), self.save_as, "Ctrl+Alt+S",
+                                        tip=tr("Save under a new name"))
         self.act_import_tree = self._action(
-            "Tree File or Backup (into the selected node)...", self.import_tree_file,
-            tip="Add all nodes of another tree file or backup inside the selected node")
+            tr("Tree File or Backup (into the selected node)..."), self.import_tree_file,
+            tip=tr("Add all nodes of another tree file or backup inside the selected node"))
         self.act_make_backup = self._action(
-            "&Back Up Notes and Settings...", lambda: self.make_backup(),
-            tip="Put your notes files and settings in one .zip file, to move to a new computer")
+            tr("&Back Up Notes and Settings..."), lambda: self.make_backup(),
+            tip=tr("Put your notes files and settings in one .zip file, to move to a new computer"))
         self.act_restore_backup = self._action(
-            "&Restore from Backup...", lambda: self.restore_backup(),
-            tip="Bring back notes files and settings from a backup; files already here are left alone")
-        self.act_import_text = self._action("Text Files as New Nodes...", self.import_text_files,
-                                            tip="Add one or more text files as new nodes inside the selected node")
+            tr("&Restore from Backup..."), lambda: self.restore_backup(),
+            tip=tr("Bring back notes files and settings from a backup; files already here are left alone"))
+        self.act_import_text = self._action(tr("Text Files as New Nodes..."), self.import_text_files,
+                                            tip=tr("Add one or more text files as new nodes inside the selected node"))
         self.act_replace_article = self._action(
-            "Text File into Article (Replace Its Text)...", self.replace_article_from_file,
-            tip="Replace the text of the selected node with a text file")
-        self.act_import_csv = self._action("CSV File (one node per row)...", self.import_csv_file,
-                                           tip="Add a node for every row of a CSV file inside the selected node")
-        self.act_export_node = self._action("Selected Node...", lambda: self.export_file("text", "node"))
-        self.act_export_branch = self._action("Selected Node and Subnodes...",
+            tr("Text File into Article (Replace Its Text)..."), self.replace_article_from_file,
+            tip=tr("Replace the text of the selected node with a text file"))
+        self.act_import_csv = self._action(tr("CSV File (one node per row)..."), self.import_csv_file,
+                                           tip=tr("Add a node for every row of a CSV file inside the selected node"))
+        self.act_export_node = self._action(tr("Selected Node..."), lambda: self.export_file("text", "node"))
+        self.act_export_branch = self._action(tr("Selected Node and Subnodes..."),
                                               lambda: self.export_file("text", "branch"))
-        self.act_export_all = self._action("Whole File...", lambda: self.export_file("text", "all"))
-        self.act_html_node = self._action("Selected Node...", lambda: self.export_file("html", "node"))
-        self.act_html_branch = self._action("Selected Node and Subnodes...",
+        self.act_export_all = self._action(tr("Whole File..."), lambda: self.export_file("text", "all"))
+        self.act_html_node = self._action(tr("Selected Node..."), lambda: self.export_file("html", "node"))
+        self.act_html_branch = self._action(tr("Selected Node and Subnodes..."),
                                             lambda: self.export_file("html", "branch"))
-        self.act_html_all = self._action("Whole File...", lambda: self.export_file("html", "all"))
+        self.act_html_all = self._action(tr("Whole File..."), lambda: self.export_file("html", "all"))
         self.act_export_tree = self._action(
-            "Selected Node and Subnodes as Tree File (.hjt)...", lambda: self.export_file("hjt", "branch"),
-            tip="Save the selected branch as a separate tree notes file")
-        self.act_print = self._action("&Print...", lambda: self.print_nodes("branch"), QKeySequence.Print,
+            tr("Selected Node and Subnodes as Tree File (.hjt)..."), lambda: self.export_file("hjt", "branch"),
+            tip=tr("Save the selected branch as a separate tree notes file"))
+        self.act_print = self._action(tr("&Print..."), lambda: self.print_nodes("branch"), QKeySequence.Print,
                                       icons.themed("document-print", S.SP_FileDialogDetailedView),
-                                      "Print the selected node and its subnodes")
-        self.act_print_node = self._action("Print Selected Node &Only...", lambda: self.print_nodes("node"))
-        self.act_print_all = self._action("Print &Whole File...", lambda: self.print_nodes("all"))
-        self.act_read_only = self._action("Read &Only", self.set_read_only, checkable=True,
-                                          tip="Protect the open file from changes")
-        self.act_set_password = self._action("Set &Password...", self.set_password,
-                                             tip="Encrypt the file with a password (saved as .twig)")
-        self.act_remove_password = self._action("Remo&ve Password", self.remove_password,
-                                                tip="Save the file without a password from now on")
-        self.act_tray = self._action("&Minimize to Tray", self.minimize_to_tray, "Ctrl+M",
-                                     tip="Hide the window; click the tray icon to bring it back")
-        self.act_exit = self._action("E&xit", self.close, "Ctrl+Q")
+                                      tr("Print the selected node and its subnodes"))
+        self.act_print_node = self._action(tr("Print Selected Node &Only..."), lambda: self.print_nodes("node"))
+        self.act_print_all = self._action(tr("Print &Whole File..."), lambda: self.print_nodes("all"))
+        self.act_read_only = self._action(tr("Read &Only"), self.set_read_only, checkable=True,
+                                          tip=tr("Protect the open file from changes"))
+        self.act_set_password = self._action(tr("Set &Password..."), self.set_password,
+                                             tip=tr("Encrypt the file with a password (saved as .twig)"))
+        self.act_remove_password = self._action(tr("Remo&ve Password"), self.remove_password,
+                                                tip=tr("Save the file without a password from now on"))
+        self.act_tray = self._action(tr("&Minimize to Tray"), self.minimize_to_tray, "Ctrl+M",
+                                     tip=tr("Hide the window; click the tray icon to bring it back"))
+        self.act_exit = self._action(tr("E&xit"), self.close, "Ctrl+Q")
 
         # Edit. Undo and Redo work on the article's text in the article, and
         # on the tree (add, delete, move, sort, paste, rename...) in the tree.
-        self.act_undo = self._action("&Undo", self.undo, QKeySequence.Undo,
+        self.act_undo = self._action(tr("&Undo"), self.undo, QKeySequence.Undo,
                                      icons.themed("edit-undo", S.SP_ArrowBack), context_widget=e)
-        self.act_redo = self._action("&Redo", self.redo, ["Ctrl+Y", "Ctrl+Shift+Z"],
+        self.act_redo = self._action(tr("&Redo"), self.redo, ["Ctrl+Y", "Ctrl+Shift+Z"],
                                      icons.themed("edit-redo", S.SP_ArrowForward), context_widget=e)
-        self.act_tree_undo = self._action("Undo Tree Change", self.undo_tree, QKeySequence.Undo,
+        self.act_tree_undo = self._action(tr("Undo Tree Change"), self.undo_tree, QKeySequence.Undo,
                                           context_widget=t)
-        self.act_tree_redo = self._action("Redo Tree Change", self.redo_tree, ["Ctrl+Y", "Ctrl+Shift+Z"],
+        self.act_tree_redo = self._action(tr("Redo Tree Change"), self.redo_tree, ["Ctrl+Y", "Ctrl+Shift+Z"],
                                           context_widget=t)
-        self.act_cut = self._action("Cu&t", self.cut_article, QKeySequence.Cut, context_widget=e,
-                                    tip="Cut the selected text, or the whole article when nothing is selected")
-        self.act_copy = self._action("&Copy", self.copy_article, QKeySequence.Copy, context_widget=e,
-                                     tip="Copy the selected text, or the whole article when nothing is selected")
-        self.act_delete_text = self._action("De&lete", self.delete_article_text,
-                                            tip="Delete the selected text, or the whole article (asks first)")
-        self.act_goto_start = self._action("Go to &Start", lambda: self._goto(QTextCursor.Start))
-        self.act_goto_end = self._action("Go to &End", lambda: self._goto(QTextCursor.End))
-        self.act_paste = self._action("&Paste", e.paste, QKeySequence.Paste, context_widget=e)
-        self.act_select_all = self._action("Select &All", e.selectAll, QKeySequence.SelectAll,
+        self.act_cut = self._action(tr("Cu&t"), self.cut_article, QKeySequence.Cut, context_widget=e,
+                                    tip=tr("Cut the selected text, or the whole article when nothing is selected"))
+        self.act_copy = self._action(tr("&Copy"), self.copy_article, QKeySequence.Copy, context_widget=e,
+                                     tip=tr("Copy the selected text, or the whole article when nothing is selected"))
+        self.act_delete_text = self._action(tr("De&lete"), self.delete_article_text,
+                                            tip=tr("Delete the selected text, or the whole article (asks first)"))
+        self.act_goto_start = self._action(tr("Go to &Start"), lambda: self._goto(QTextCursor.Start))
+        self.act_goto_end = self._action(tr("Go to &End"), lambda: self._goto(QTextCursor.End))
+        self.act_paste = self._action(tr("&Paste"), e.paste, QKeySequence.Paste, context_widget=e)
+        self.act_select_all = self._action(tr("Select &All"), e.selectAll, QKeySequence.SelectAll,
                                            context_widget=e)
-        for a, name in ((self.act_undo, "Undo"), (self.act_redo, "Redo"),
-                        (self.act_tree_undo, "Undo a Tree Change"), (self.act_tree_redo, "Redo a Tree Change")):
+        for a, name in ((self.act_undo, tr("Undo")), (self.act_redo, tr("Redo")),
+                        (self.act_tree_undo, tr("Undo a Tree Change")), (self.act_tree_redo, tr("Redo a Tree Change"))):
             a.setEnabled(False)
             a.setProperty("shortcut_name", name)   # the menu text changes ("Undo Delete ...")
-        self.act_date = self._action("Insert &Date", lambda: self.insert_datetime("date"),
+        self.act_date = self._action(tr("Insert &Date"), lambda: self.insert_datetime("date"),
                                      "Ctrl+Shift+D", context_widget=e)
-        self.act_time = self._action("Insert &Time", lambda: self.insert_datetime("time"),
+        self.act_time = self._action(tr("Insert &Time"), lambda: self.insert_datetime("time"),
                                      "Ctrl+Shift+T", context_widget=e)
-        self.act_datetime = self._action("Insert Date &and Time", lambda: self.insert_datetime("both"),
+        self.act_datetime = self._action(tr("Insert Date &and Time"), lambda: self.insert_datetime("both"),
                                          "F5", context_widget=e)
-        self.act_follow_link = self._action("&Follow Link", self.follow_link, "Ctrl+H",
-                                            tip="Open the link at the cursor (Ctrl+click also works)",
+        self.act_follow_link = self._action(tr("&Follow Link"), self.follow_link, "Ctrl+H",
+                                            tip=tr("Open the link at the cursor (Ctrl+click also works)"),
                                             context_widget=e)
-        self.act_link_file = self._action("Link to &File...", lambda: self.insert_file_link(False),
-                                          tip="Insert a link to a file")
-        self.act_link_folder = self._action("Link to F&older...", lambda: self.insert_file_link(True),
-                                            tip="Insert a link to a folder")
-        self.act_insert_file = self._action("Text from F&ile...", self.insert_text_file,
-                                            tip="Insert the contents of a text file at the cursor")
-        self.act_word_count = self._action("&Word Count...", self.show_word_count,
-                                           tip="Count words in the selection, article, branch and file")
+        self.act_link_file = self._action(tr("Link to &File..."), lambda: self.insert_file_link(False),
+                                          tip=tr("Insert a link to a file"))
+        self.act_link_folder = self._action(tr("Link to F&older..."), lambda: self.insert_file_link(True),
+                                            tip=tr("Insert a link to a folder"))
+        self.act_insert_file = self._action(tr("Text from F&ile..."), self.insert_text_file,
+                                            tip=tr("Insert the contents of a text file at the cursor"))
+        self.act_word_count = self._action(tr("&Word Count..."), self.show_word_count,
+                                           tip=tr("Count words in the selection, article, branch and file"))
 
         # Format: formatted text (turns a plain note into a formatted one)
         def rich(text, slot, key=None, tip=None, checkable=False):
             return self._action(text, slot, key, tip=tip, context_widget=e if key else None,
                                 checkable=checkable)
-        self.act_bold = rich("&Bold", lambda: self.toggle_char("bold"), "Ctrl+B")
-        self.act_italic = rich("&Italic", lambda: self.toggle_char("italic"), "Ctrl+I")
-        self.act_underline = rich("U&nderline", lambda: self.toggle_char("underline"), "Ctrl+U")
-        self.act_strike = rich("Stri&kethrough", lambda: self.toggle_char("strike"))
-        self.act_text_color = rich("Text &Colour...", lambda: self.choose_color(False))
-        self.act_highlight = rich("&Highlight Colour...", lambda: self.choose_color(True))
-        self.act_char_font = rich("&Font...", self.choose_char_font)
-        self.act_bigger = rich("Larger Text", lambda: self.change_size(2), "Ctrl+Shift+.")
-        self.act_smaller = rich("Smaller Text", lambda: self.change_size(-2), "Ctrl+Shift+,")
+        self.act_bold = rich(tr("&Bold"), lambda: self.toggle_char("bold"), "Ctrl+B")
+        self.act_italic = rich(tr("&Italic"), lambda: self.toggle_char("italic"), "Ctrl+I")
+        self.act_underline = rich(tr("U&nderline"), lambda: self.toggle_char("underline"), "Ctrl+U")
+        self.act_strike = rich(tr("Stri&kethrough"), lambda: self.toggle_char("strike"))
+        self.act_text_color = rich(tr("Text &Colour..."), lambda: self.choose_color(False))
+        self.act_highlight = rich(tr("&Highlight Colour..."), lambda: self.choose_color(True))
+        self.act_char_font = rich(tr("&Font..."), self.choose_char_font)
+        self.act_bigger = rich(tr("Larger Text"), lambda: self.change_size(2), "Ctrl+Shift+.")
+        self.act_smaller = rich(tr("Smaller Text"), lambda: self.change_size(-2), "Ctrl+Shift+,")
         self.act_styles = {}
-        for level, label in ((0, "Normal Text"), (1, "Heading 1"), (2, "Heading 2"), (3, "Heading 3")):
+        for level, label in ((0, tr("Normal Text")), (1, tr("Heading 1")), (2, tr("Heading 2")), (3, tr("Heading 3"))):
             self.act_styles[level] = rich(label, lambda lv=level: self.set_heading(lv),
                                           f"Ctrl+{level}")
-        self.act_bullets = rich("&Bulleted List", lambda: self.toggle_list(QTextListFormat.ListDisc))
-        self.act_numbers = rich("&Numbered List", lambda: self.toggle_list(QTextListFormat.ListDecimal))
+        self.act_bullets = rich(tr("&Bulleted List"), lambda: self.toggle_list(QTextListFormat.ListDisc))
+        self.act_numbers = rich(tr("&Numbered List"), lambda: self.toggle_list(QTextListFormat.ListDecimal))
         self.act_align = {}
-        for name, flag, label in (("left", Qt.AlignLeft, "Align &Left"), ("center", Qt.AlignHCenter, "&Centre"),
-                                  ("right", Qt.AlignRight, "Align &Right")):
+        for name, flag, label in (("left", Qt.AlignLeft, tr("Align &Left")), ("center", Qt.AlignHCenter, tr("&Centre")),
+                                  ("right", Qt.AlignRight, tr("Align &Right"))):
             self.act_align[name] = rich(label, lambda f=flag: self.set_alignment(f))
-        self.act_image = rich("&Picture...", self.insert_image_file,
-                              tip="Insert a picture into the article")
-        self.act_table = rich("&Table...", self.insert_table, tip="Insert a table")
-        self.act_row = rich("Insert &Row Below", lambda: self.table_edit("row"))
-        self.act_col = rich("Insert &Column Right", lambda: self.table_edit("col"))
-        self.act_del_row = rich("&Delete Row", lambda: self.table_edit("del-row"))
-        self.act_del_col = rich("D&elete Column", lambda: self.table_edit("del-col"))
-        self.act_hr = rich("&Horizontal Line", self.insert_rule)
-        self.act_clear_fmt = rich("Clear Formatting", self.clear_formatting,
-                                  tip="Remove the formatting of the selected text")
-        self.act_plain = rich("Convert Note to &Plain Text...", self.make_plain,
-                              tip="Remove all formatting and pictures from this note")
+        self.act_image = rich(tr("&Picture..."), self.insert_image_file,
+                              tip=tr("Insert a picture into the article"))
+        self.act_table = rich(tr("&Table..."), self.insert_table, tip=tr("Insert a table"))
+        self.act_row = rich(tr("Insert &Row Below"), lambda: self.table_edit("row"))
+        self.act_col = rich(tr("Insert &Column Right"), lambda: self.table_edit("col"))
+        self.act_del_row = rich(tr("&Delete Row"), lambda: self.table_edit("del-row"))
+        self.act_del_col = rich(tr("D&elete Column"), lambda: self.table_edit("del-col"))
+        self.act_hr = rich(tr("&Horizontal Line"), self.insert_rule)
+        self.act_clear_fmt = rich(tr("Clear Formatting"), self.clear_formatting,
+                                  tip=tr("Remove the formatting of the selected text"))
+        self.act_plain = rich(tr("Convert Note to &Plain Text..."), self.make_plain,
+                              tip=tr("Remove all formatting and pictures from this note"))
         self.rich_actions = [self.act_bold, self.act_italic, self.act_underline, self.act_strike,
                              self.act_text_color, self.act_highlight, self.act_char_font, self.act_bigger,
                              self.act_smaller, *self.act_styles.values(), self.act_bullets,
@@ -348,176 +375,176 @@ class MainWindow(QMainWindow):
                              self.act_clear_fmt, self.act_plain]
 
         # Format (article text: the selection, or the whole article)
-        self.act_upper = self._action("&UPPERCASE", lambda: self.format_text(textfmt.to_upper),
-                                      tip="Change the selection (or the whole article) to capitals")
-        self.act_lower = self._action("&lowercase", lambda: self.format_text(textfmt.to_lower),
-                                      tip="Change the selection (or the whole article) to small letters")
-        self.act_strip = self._action("Remove Leading &Spaces",
+        self.act_upper = self._action(tr("&UPPERCASE"), lambda: self.format_text(textfmt.to_upper),
+                                      tip=tr("Change the selection (or the whole article) to capitals"))
+        self.act_lower = self._action(tr("&lowercase"), lambda: self.format_text(textfmt.to_lower),
+                                      tip=tr("Change the selection (or the whole article) to small letters"))
+        self.act_strip = self._action(tr("Remove Leading &Spaces"),
                                       lambda: self.format_text(textfmt.remove_leading_spaces),
-                                      tip="Remove spaces and tabs at the start of each line")
+                                      tip=tr("Remove spaces and tabs at the start of each line"))
         self.act_strip_returns = self._action(
-            "Remove Leading Spaces and &Returns",
+            tr("Remove Leading Spaces and &Returns"),
             lambda: self.format_text(textfmt.remove_leading_spaces_and_returns),
-            tip="Remove quote marks and indentation and join wrapped lines into paragraphs "
-                "(for pasted email)")
+            tip=tr("Remove quote marks and indentation and join wrapped lines into paragraphs "
+                "(for pasted email)"))
 
         # Search
-        self.act_find = self._action("&Find...", self.find_here, ["Ctrl+F", "Shift+F12"],
+        self.act_find = self._action(tr("&Find..."), self.find_here, ["Ctrl+F", "Shift+F12"],
                                      icons.themed("edit-find", S.SP_FileDialogContentsView),
-                                     "Search titles and articles of all nodes")
+                                     tr("Search titles and articles of all nodes"))
         self.act_search_tree = self._action(
-            "Search &Tree...", self.search_tree, "Shift+F11",
+            tr("Search &Tree..."), self.search_tree, "Shift+F11",
             icons.themed("system-search", S.SP_FileDialogContentsView),
-            "Search the titles and articles of the whole tree")
-        self.act_find_next = self._action("Find &Next", lambda: self.find_again(False), "F3")
-        self.act_find_prev = self._action("Find &Previous", lambda: self.find_again(True), "Shift+F3")
-        self.act_replace = self._action("&Replace...", lambda: self.show_find(True), "Ctrl+R")
+            tr("Search the titles and articles of the whole tree"))
+        self.act_find_next = self._action(tr("Find &Next"), lambda: self.find_again(False), "F3")
+        self.act_find_prev = self._action(tr("Find &Previous"), lambda: self.find_again(True), "Shift+F3")
+        self.act_replace = self._action(tr("&Replace..."), lambda: self.show_find(True), "Ctrl+R")
 
         # Node (keys work while the tree has the focus)
-        self.act_add_child = self._action("Add &Child Node", self.add_child_node, "Ins",
-                                          icons.add_child(), "Add a node inside the selected one",
+        self.act_add_child = self._action(tr("Add &Child Node"), self.add_child_node, "Ins",
+                                          icons.add_child(), tr("Add a node inside the selected one"),
                                           context_widget=t)
-        self.act_add_after = self._action("&Add Node Below", self.add_node_after, ["Shift+Ins", "Return"],
-                                          icons.add_sibling(), "Add a node below the selected one",
+        self.act_add_after = self._action(tr("&Add Node Below"), self.add_node_after, ["Shift+Ins", "Return"],
+                                          icons.add_sibling(), tr("Add a node below the selected one"),
                                           context_widget=t)
-        self.act_add_before = self._action("Add Node A&bove", self.add_node_before, "Ctrl+Shift+Ins",
-                                           tip="Add a node above the selected one", context_widget=t)
-        self.act_rename = self._action("&Rename", self.rename_node, "F2",
-                                       tip="Rename the selected node", context_widget=t)
-        self.act_delete = self._action("&Delete Node", self.delete_node, "Del",
+        self.act_add_before = self._action(tr("Add Node A&bove"), self.add_node_before, "Ctrl+Shift+Ins",
+                                           tip=tr("Add a node above the selected one"), context_widget=t)
+        self.act_rename = self._action(tr("&Rename"), self.rename_node, "F2",
+                                       tip=tr("Rename the selected node"), context_widget=t)
+        self.act_delete = self._action(tr("&Delete Node"), self.delete_node, "Del",
                                        icons.themed("edit-delete", S.SP_TrashIcon),
-                                       "Delete the selected node and everything inside it",
+                                       tr("Delete the selected node and everything inside it"),
                                        context_widget=t)
         # Explicit keys: on Linux the standard Copy/Paste also include
         # Ctrl+Ins / Shift+Ins, which add nodes here.
-        self.act_cut_node = self._action("Cu&t Node", self.cut_node, "Ctrl+X",
-                                         tip="Cut the selected node and its subnodes", context_widget=t)
-        self.act_copy_node = self._action("C&opy Node", self.copy_node, "Ctrl+C",
-                                          tip="Copy the selected node and its subnodes", context_widget=t)
-        self.act_paste_child = self._action("&Paste Node (as Child)", lambda: self.paste_node(True),
-                                            "Ctrl+V", tip="Paste inside the selected node",
+        self.act_cut_node = self._action(tr("Cu&t Node"), self.cut_node, "Ctrl+X",
+                                         tip=tr("Cut the selected node and its subnodes"), context_widget=t)
+        self.act_copy_node = self._action(tr("C&opy Node"), self.copy_node, "Ctrl+C",
+                                          tip=tr("Copy the selected node and its subnodes"), context_widget=t)
+        self.act_paste_child = self._action(tr("&Paste Node (as Child)"), lambda: self.paste_node(True),
+                                            "Ctrl+V", tip=tr("Paste inside the selected node"),
                                             context_widget=t)
-        self.act_paste_node = self._action("Paste Node &Below", lambda: self.paste_node(False),
-                                           "Ctrl+Shift+V", tip="Paste below the selected node",
+        self.act_paste_node = self._action(tr("Paste Node &Below"), lambda: self.paste_node(False),
+                                           "Ctrl+Shift+V", tip=tr("Paste below the selected node"),
                                            context_widget=t)
-        self.act_copy_link = self._action("Copy Node &Link Address", self.copy_node_link, "Ctrl+Shift+H",
-                                          tip="Copy a node:// link to paste into another article",
+        self.act_copy_link = self._action(tr("Copy Node &Link Address"), self.copy_node_link, "Ctrl+Shift+H",
+                                          tip=tr("Copy a node:// link to paste into another article"),
                                           context_widget=t)
-        self.act_move_up = self._action("Move &Up", self.tree.move_up, "Shift+Up",
-                                        icons.themed("go-up", S.SP_ArrowUp), "Move node up",
+        self.act_move_up = self._action(tr("Move &Up"), self.tree.move_up, "Shift+Up",
+                                        icons.themed("go-up", S.SP_ArrowUp), tr("Move node up"),
                                         context_widget=t)
-        self.act_move_down = self._action("Move Do&wn", self.tree.move_down, "Shift+Down",
-                                          icons.themed("go-down", S.SP_ArrowDown), "Move node down",
+        self.act_move_down = self._action(tr("Move Do&wn"), self.tree.move_down, "Shift+Down",
+                                          icons.themed("go-down", S.SP_ArrowDown), tr("Move node down"),
                                           context_widget=t)
-        self.act_move_left = self._action("Move &Left (out a level)", self.tree.move_left,
+        self.act_move_left = self._action(tr("Move &Left (out a level)"), self.tree.move_left,
                                           "Shift+Left", icons.themed("go-previous", S.SP_ArrowLeft),
-                                          "Move node out one level", context_widget=t)
-        self.act_move_right = self._action("Move R&ight (in a level)", self.tree.move_right,
+                                          tr("Move node out one level"), context_widget=t)
+        self.act_move_right = self._action(tr("Move R&ight (in a level)"), self.tree.move_right,
                                            "Shift+Right", icons.themed("go-next", S.SP_ArrowRight),
-                                           "Move node in one level", context_widget=t)
-        self.act_next_sibling = self._action("&Next Sibling", lambda: self.tree.select_sibling(1),
+                                           tr("Move node in one level"), context_widget=t)
+        self.act_next_sibling = self._action(tr("&Next Sibling"), lambda: self.tree.select_sibling(1),
                                              "Alt+Down", context_widget=t)
-        self.act_prev_sibling = self._action("Pre&vious Sibling", lambda: self.tree.select_sibling(-1),
+        self.act_prev_sibling = self._action(tr("Pre&vious Sibling"), lambda: self.tree.select_sibling(-1),
                                              "Alt+Up", context_widget=t)
-        self.act_sort = self._action("&Sort Subnodes (One Level)", self.sort_children, "Ctrl+Shift+S",
-                                     tip="Sort the nodes inside the selected node by title",
+        self.act_sort = self._action(tr("&Sort Subnodes (One Level)"), self.sort_children, "Ctrl+Shift+S",
+                                     tip=tr("Sort the nodes inside the selected node by title"),
                                      context_widget=t)
-        self.act_sort_all = self._action("Sort &Whole Tree (All Levels)", self.sort_whole_tree)
+        self.act_sort_all = self._action(tr("Sort &Whole Tree (All Levels)"), self.sort_whole_tree)
         self.act_siblings_right = self._action(
-            "Next Siblings Move Right", self.move_next_siblings_right,
-            tip="The nodes below the selected one (same level) move inside it")
+            tr("Next Siblings Move Right"), self.move_next_siblings_right,
+            tip=tr("The nodes below the selected one (same level) move inside it"))
         self.act_children_left = self._action(
-            "All Children Move Left", self.move_children_left,
-            tip="The nodes inside the selected one move out, to just below it")
+            tr("All Children Move Left"), self.move_children_left,
+            tip=tr("The nodes inside the selected one move out, to just below it"))
         self.icon_group = QActionGroup(self)
         self.act_icons = {}
         for kind, (label, _color) in treestyle.NOTE_ICONS.items():
-            act = QAction(treestyle.note_icon(kind), label, self, checkable=True)
+            act = QAction(treestyle.note_icon(kind), tr(label), self, checkable=True)
             act.triggered.connect(lambda _c=False, k=kind: self.set_note_look(icon=k))
             self.icon_group.addAction(act)
             self.act_icons[kind] = act
         self.act_colors = {}
         self.color_group = QActionGroup(self)
-        for label, value in [("Default", "")] + list(treestyle.NOTE_COLORS.items()):
+        for label, value in [(N_("Default"), "")] + list(treestyle.NOTE_COLORS.items()):
             pm = QPixmap(14, 14)
             pm.fill(QColor(value) if value else Qt.transparent)
-            act = QAction(QIcon(pm), label, self, checkable=True)
+            act = QAction(QIcon(pm), tr(label), self, checkable=True)
             act.triggered.connect(lambda _c=False, v=value: self.set_note_look(color=v))
             self.color_group.addAction(act)
             self.act_colors[value] = act
-        self.act_color_custom = self._action("Other Colour...", self.choose_note_color)
-        self.act_copy_name = self._action("Copy Node &Name", self.copy_node_name,
-                                          tip="Copy the title of the selected node")
-        self.act_paste_name = self._action("Paste Node Na&me", self.paste_node_name,
-                                           tip="Rename the selected node to the text on the clipboard")
+        self.act_color_custom = self._action(tr("Other Colour..."), self.choose_note_color)
+        self.act_copy_name = self._action(tr("Copy Node &Name"), self.copy_node_name,
+                                          tip=tr("Copy the title of the selected node"))
+        self.act_paste_name = self._action(tr("Paste Node Na&me"), self.paste_node_name,
+                                           tip=tr("Rename the selected node to the text on the clipboard"))
 
         # View
-        self.act_word_wrap = self._action("&Word Wrap", self.set_word_wrap, checkable=True)
-        self.act_classic_tree = self._action("C&lassic Tree Look", self.set_classic_tree, checkable=True,
-                                             tip="Folder icons, dotted lines and +/- boxes in the tree")
+        self.act_word_wrap = self._action(tr("&Word Wrap"), self.set_word_wrap, checkable=True)
+        self.act_classic_tree = self._action(tr("C&lassic Tree Look"), self.set_classic_tree, checkable=True,
+                                             tip=tr("Folder icons, dotted lines and +/- boxes in the tree"))
         self.view_group = QActionGroup(self)
         self.act_view_modes = {}
-        for mode, label in (("both", "Tree &and Article"), ("tree", "Tree O&nly"),
-                            ("article", "Article Onl&y")):
+        for mode, label in (("both", tr("Tree &and Article")), ("tree", tr("Tree O&nly")),
+                            ("article", tr("Article Onl&y"))):
             act = QAction(label, self, checkable=True)
             act.triggered.connect(lambda _c=False, m=mode: self.set_view_mode(m))
             self.view_group.addAction(act)
             self.act_view_modes[mode] = act
-        self.act_focus = self._action("&Focus on Branch", self.focus_branch, "Ctrl+]",
-                                      tip="Show only the selected node and the nodes inside it")
-        self.act_focus_out = self._action("Focus &Out One Level", self.focus_out, "Ctrl+[",
-                                          tip="Show the branch one level up")
-        self.act_unfocus = self._action("Show &Whole Tree", lambda: self.set_tab_root(None),
-                                        tip="Show the whole tree again in this tab")
-        self.act_new_tab = self._action("Open Branch in New &Tab", self.open_branch_tab, "Ctrl+T",
-                                        tip="Open the selected branch in a tab of its own")
-        self.act_close_tab = self._action("Close Ta&b", lambda: self.close_tab(self.tabs.currentIndex()),
+        self.act_focus = self._action(tr("&Focus on Branch"), self.focus_branch, "Ctrl+]",
+                                      tip=tr("Show only the selected node and the nodes inside it"))
+        self.act_focus_out = self._action(tr("Focus &Out One Level"), self.focus_out, "Ctrl+[",
+                                          tip=tr("Show the branch one level up"))
+        self.act_unfocus = self._action(tr("Show &Whole Tree"), lambda: self.set_tab_root(None),
+                                        tip=tr("Show the whole tree again in this tab"))
+        self.act_new_tab = self._action(tr("Open Branch in New &Tab"), self.open_branch_tab, "Ctrl+T",
+                                        tip=tr("Open the selected branch in a tab of its own"))
+        self.act_close_tab = self._action(tr("Close Ta&b"), lambda: self.close_tab(self.tabs.currentIndex()),
                                           "Ctrl+W")
-        self.act_next_tab = self._action("Next Tab", lambda: self._step_tab(1), "Ctrl+PgDown")
-        self.act_prev_tab = self._action("Previous Tab", lambda: self._step_tab(-1), "Ctrl+PgUp")
-        self.act_expand_all = self._action("&Expand All", self.tree.expandAll)
-        self.act_collapse_all = self._action("&Collapse All", self.tree.collapseAll)
-        self.act_expand_one = self._action("Expand Selected Node (One Level)",
+        self.act_next_tab = self._action(tr("Next Tab"), lambda: self._step_tab(1), "Ctrl+PgDown")
+        self.act_prev_tab = self._action(tr("Previous Tab"), lambda: self._step_tab(-1), "Ctrl+PgUp")
+        self.act_expand_all = self._action(tr("&Expand All"), self.tree.expandAll)
+        self.act_collapse_all = self._action(tr("&Collapse All"), self.tree.collapseAll)
+        self.act_expand_one = self._action(tr("Expand Selected Node (One Level)"),
                                            lambda: self.expand_branch(True, False))
-        self.act_expand_branch = self._action("Expand Selected Node (All Levels)",
+        self.act_expand_branch = self._action(tr("Expand Selected Node (All Levels)"),
                                               lambda: self.expand_branch(True, True))
-        self.act_collapse_branch = self._action("Collapse Selected Node",
+        self.act_collapse_branch = self._action(tr("Collapse Selected Node"),
                                                 lambda: self.expand_branch(False, True))
-        self.act_switch_pane = self._action("&Switch Pane", self.switch_pane, ["F6", "Ctrl+Tab"],
-                                            tip="Jump between the tree and the article")
-        self.act_fonts = self._action("&Fonts...", lambda: self.choose_font(self._zoom_target()),
-                                      tip="Fonts and sizes of the interface, the tree and the article")
-        self.act_article_font = self._action("&Article Font...", lambda: self.choose_font("editor"))
-        self.act_tree_font = self._action("&Tree Font...", lambda: self.choose_font("tree"))
-        self.act_reset_fonts = self._action("&Reset Fonts", self.reset_fonts,
-                                            tip="Default fonts and text sizes for the interface, tree and article")
-        self.act_zoom_in = self._action("&Larger Text", lambda: self.zoom_text(self._zoom_target(), 1),
+        self.act_switch_pane = self._action(tr("&Switch Pane"), self.switch_pane, ["F6", "Ctrl+Tab"],
+                                            tip=tr("Jump between the tree and the article"))
+        self.act_fonts = self._action(tr("&Fonts..."), lambda: self.choose_font(self._zoom_target()),
+                                      tip=tr("Fonts and sizes of the interface, the tree and the article"))
+        self.act_article_font = self._action(tr("&Article Font..."), lambda: self.choose_font("editor"))
+        self.act_tree_font = self._action(tr("&Tree Font..."), lambda: self.choose_font("tree"))
+        self.act_reset_fonts = self._action(tr("&Reset Fonts"), self.reset_fonts,
+                                            tip=tr("Default fonts and text sizes for the interface, tree and article"))
+        self.act_zoom_in = self._action(tr("&Larger Text"), lambda: self.zoom_text(self._zoom_target(), 1),
                                         ["Ctrl+=", "Ctrl++"],
-                                        tip="Make the text of the tree or the article (where you are) larger")
-        self.act_zoom_out = self._action("&Smaller Text", lambda: self.zoom_text(self._zoom_target(), -1),
+                                        tip=tr("Make the text of the tree or the article (where you are) larger"))
+        self.act_zoom_out = self._action(tr("&Smaller Text"), lambda: self.zoom_text(self._zoom_target(), -1),
                                          "Ctrl+-",
-                                         tip="Make the text of the tree or the article (where you are) smaller")
-        self.act_zoom_reset = self._action("&Normal Text Size", lambda: self.zoom_text(self._zoom_target(), 0),
+                                         tip=tr("Make the text of the tree or the article (where you are) smaller"))
+        self.act_zoom_reset = self._action(tr("&Normal Text Size"), lambda: self.zoom_text(self._zoom_target(), 0),
                                            "Ctrl+0")
-        self.act_tree_larger = self._action("&Tree Text Larger", lambda: self.zoom_text("tree", 1))
-        self.act_tree_smaller = self._action("Tree Text S&maller", lambda: self.zoom_text("tree", -1))
-        self.act_article_larger = self._action("&Article Text Larger", lambda: self.zoom_text("editor", 1))
-        self.act_article_smaller = self._action("Article Text Sm&aller", lambda: self.zoom_text("editor", -1))
+        self.act_tree_larger = self._action(tr("&Tree Text Larger"), lambda: self.zoom_text("tree", 1))
+        self.act_tree_smaller = self._action(tr("Tree Text S&maller"), lambda: self.zoom_text("tree", -1))
+        self.act_article_larger = self._action(tr("&Article Text Larger"), lambda: self.zoom_text("editor", 1))
+        self.act_article_smaller = self._action(tr("Article Text Sm&aller"), lambda: self.zoom_text("editor", -1))
         self.tree_icon_group = QActionGroup(self)
         self.act_tree_icon_sizes = {}
         for label, px in TREE_ICON_SIZES.items():
-            act = QAction(f"{label} ({px} px)", self, checkable=True)
+            act = QAction(tr("{label} ({px} px)").format(label=tr(label), px=px), self, checkable=True)
             act.triggered.connect(lambda _c=False, n=px: self.set_tree_icon_size(n))
             self.tree_icon_group.addAction(act)
             self.act_tree_icon_sizes[px] = act
-        self.act_pane_colors = self._action("Colo&urs...", self.choose_pane_colors,
-                                            tip="Background and text colours of the tree and the article")
+        self.act_pane_colors = self._action(tr("Colo&urs..."), self.choose_pane_colors,
+                                            tip=tr("Background and text colours of the tree and the article"))
 
         # Options
         self.startup_group = QActionGroup(self)
         self.act_startup = {}
         for mode, label in STARTUP_MODES.items():
-            act = QAction(label, self, checkable=True)
+            act = QAction(tr(label), self, checkable=True)
             act.triggered.connect(lambda _c=False, m=mode: self.settings.setValue("options/startup", m))
             self.startup_group.addAction(act)
             self.act_startup[mode] = act
@@ -525,87 +552,97 @@ class MainWindow(QMainWindow):
         self.close_group = QActionGroup(self)
         self.act_close_modes = {}
         for mode, label in CLOSE_MODES.items():
-            act = QAction(label, self, checkable=True)
+            act = QAction(tr(label), self, checkable=True)
             act.triggered.connect(lambda _c=False, m=mode: self.settings.setValue("options/on_close", m))
             self.close_group.addAction(act)
             self.act_close_modes[mode] = act
-        self.act_tab_switch = self._action("Use &Tab to Switch Between Tree and Article",
+        self.act_tab_switch = self._action(tr("Use &Tab to Switch Between Tree and Article"),
                                            self.set_tab_switch, checkable=True,
-                                           tip="Tab switches panes; Ctrl+Tab then types a tab in the article")
+                                           tip=tr("Tab switches panes; Ctrl+Tab then types a tab in the article"))
         self.act_tray_minimize = self._action(
-            "&Minimize to Tray Instead of the Taskbar",
+            tr("&Minimize to Tray Instead of the Taskbar"),
             lambda on: self.settings.setValue("options/tray_on_minimize", on), checkable=True)
         self.act_portable = self._action(
-            "Keep Settings &Next to the Program", self.set_portable, checkable=True,
-            tip=f"Store settings in {portable.INI_NAME} beside the program, for use from a USB stick")
+            tr("Keep Settings &Next to the Program"), self.set_portable, checkable=True,
+            tip=tr("Store settings in {INI_NAME} beside the program, for use from a USB stick").format(INI_NAME=portable.INI_NAME))
         self.act_backup = self._action(
-            "Keep a &Backup Copy (.bak) When Saving",
+            tr("Keep a &Backup Copy (.bak) When Saving"),
             lambda on: self.settings.setValue("options/backup", on), checkable=True)
-        self.act_autosave = self._action(f"&Auto-save Every {AUTOSAVE_MINUTES} Minutes",
+        self.act_autosave = self._action(tr("&Auto-save Every {AUTOSAVE_MINUTES} Minutes").format(AUTOSAVE_MINUTES=AUTOSAVE_MINUTES),
                                          self.set_autosave, checkable=True)
         self.act_auto_paste = self._action(
-            "Automatic &Paste", self.set_auto_paste, checkable=True,
-            tip="Text copied in other programs is added to the current article")
-        self.act_spell = self._action("Check &Spelling", self.set_spell_check, checkable=True,
-                                      tip="Underline misspelled words in articles")
+            tr("Automatic &Paste"), self.set_auto_paste, checkable=True,
+            tip=tr("Text copied in other programs is added to the current article"))
+        self.act_spell = self._action(tr("Check &Spelling"), self.set_spell_check, checkable=True,
+                                      tip=tr("Underline misspelled words in articles"))
         self.spell_group = QActionGroup(self)
         self.act_spell_langs = {}
         self.act_file_types = self._action(
-            "Open .hjt Files with Twigpad", lambda: self.make_file_default(),
-            tip="Double-clicking a .hjt or .twig file in your file manager opens it in Twigpad")
+            tr("Open .hjt Files with Twigpad"), lambda: self.make_file_default(),
+            tip=tr("Double-clicking a .hjt or .twig file in your file manager opens it in Twigpad"))
         self.act_reset_settings = self._action(
-            "&Reset All Settings to Defaults...", self.reset_settings,
-            tip="Put every option back the way it was when Twigpad was installed (notes are not touched)")
+            tr("&Reset All Settings to Defaults..."), self.reset_settings,
+            tip=tr("Put every option back the way it was when Twigpad was installed (notes are not touched)"))
         self.act_download_langs = self._action(
-            "&Download Languages...", self.show_dictionaries,
-            tip="Download spell-checking dictionaries for more languages")
+            tr("&Download Languages..."), self.show_dictionaries,
+            tip=tr("Download spell-checking dictionaries for more languages"))
 
-        self.act_about = self._action(f"&About {APP_NAME}", self.about)
-        self.act_donate = self._action("&Support the Developer (Donate)...",
+        self.act_about = self._action(tr("&About {APP_NAME}").format(APP_NAME=APP_NAME), self.about)
+        self.act_donate = self._action(tr("&Support the Developer (Donate)..."),
                                        lambda: self.open_web(developer.DONATE_URL),
                                        icon=treestyle.note_icon("heart"),
-                                       tip=f"Donate to {developer.DEVELOPER} with PayPal")
-        self.act_more_apps = self._action(f"&More Apps by {developer.COMPANY}...", self.show_more_apps,
-                                          tip="Other apps by the developer of Twigpad")
-        self.act_report_bug = self._action("&Report a Bug...", self.report_bug,
-                                           tip="Report a problem on GitHub (opens your web browser)")
+                                       tip=tr("Donate to {DEVELOPER} with PayPal").format(DEVELOPER=developer.DEVELOPER))
+        self.act_more_apps = self._action(tr("&More Apps by {COMPANY}...").format(COMPANY=developer.COMPANY), self.show_more_apps,
+                                          tip=tr("Other apps by the developer of Twigpad"))
+        self.act_report_bug = self._action(tr("&Report a Bug..."), self.report_bug,
+                                           tip=tr("Report a problem on GitHub (opens your web browser)"))
         self.act_request_feature = self._action(
-            "Request a &Feature...", self.request_feature,
-            tip="Suggest an idea for Twigpad on GitHub (opens your web browser)")
+            tr("Request a &Feature..."), self.request_feature,
+            tip=tr("Suggest an idea for Twigpad on GitHub (opens your web browser)"))
         self.act_shortcuts = self._action(
-            "&Keyboard Shortcuts", self.show_shortcuts, ["F1", "Ctrl+/"],
-            tip="Every keyboard shortcut in Twigpad, with a search box")
-        self.act_developer = self._action("About the &Developer",
+            tr("&Keyboard Shortcuts"), self.show_shortcuts, ["F1", "Ctrl+/"],
+            tip=tr("Every keyboard shortcut in Twigpad, with a search box"))
+        self.act_developer = self._action(tr("About the &Developer"),
                                           lambda: self.open_web(developer.DEVELOPER_URL),
-                                          tip=f"{developer.DEVELOPER}'s page on the web")
+                                          tip=tr("{DEVELOPER}'s page on the web").format(DEVELOPER=developer.DEVELOPER))
 
         self.theme_group = QActionGroup(self)
         self.act_themes = {}
         for name, label in theme.THEMES.items():
-            act = QAction(label, self, checkable=True)
+            act = QAction(tr(label), self, checkable=True)
             act.triggered.connect(lambda _c=False, n=name: self.set_theme(n))
             self.theme_group.addAction(act)
             self.act_themes[name] = act
 
+        self.language_group = QActionGroup(self)
+        self.act_languages = {}
+        for code, label in [(i18n.AUTO, tr("&Automatic (Follow the Desktop)"))] + list(i18n.LANGUAGES.items()):
+            act = QAction(label, self, checkable=True)
+            act.triggered.connect(lambda _c=False, c=code: self.set_language(c))
+            self.language_group.addAction(act)
+            self.act_languages[code] = act
+        choice = self.settings.value("view/language", i18n.AUTO, type=str)
+        self.act_languages.get(choice, self.act_languages[i18n.AUTO]).setChecked(True)
+
     def _create_menus(self) -> None:
         mb = self.menuBar()
-        m = mb.addMenu("&File")
+        m = mb.addMenu(tr("&File"))
         m.addActions([self.act_new, self.act_open])
-        self.recent_menu = m.addMenu("Open &Recent")
+        self.recent_menu = m.addMenu(tr("Open &Recent"))
         self.recent_menu.aboutToShow.connect(self._fill_recent_menu)
         m.addActions([self.act_save, self.act_save_as])
         m.addSeparator()
-        sub = m.addMenu("&Import")
+        sub = m.addMenu(tr("&Import"))
         sub.addActions([self.act_import_tree, self.act_import_text, self.act_import_csv])
         sub.addSeparator()
         sub.addAction(self.act_replace_article)
-        sub = m.addMenu("&Export")
-        text = sub.addMenu("As &Text")
+        sub = m.addMenu(tr("&Export"))
+        text = sub.addMenu(tr("As &Text"))
         text.addActions([self.act_export_node, self.act_export_branch, self.act_export_all])
-        page = sub.addMenu("As &HTML Web Page")
+        page = sub.addMenu(tr("As &HTML Web Page"))
         page.addActions([self.act_html_node, self.act_html_branch, self.act_html_all])
         sub.addAction(self.act_export_tree)
-        sub = m.addMenu("&Backup && Restore")
+        sub = m.addMenu(tr("&Backup && Restore"))
         sub.addActions([self.act_make_backup, self.act_restore_backup])
         m.addSeparator()
         m.addActions([self.act_print, self.act_print_node, self.act_print_all])
@@ -615,7 +652,7 @@ class MainWindow(QMainWindow):
         m.addSeparator()
         m.addActions([self.act_tray, self.act_exit])
 
-        m = mb.addMenu("&Edit")
+        m = mb.addMenu(tr("&Edit"))
         m.aboutToShow.connect(self._update_undo_actions)
         m.addActions([self.act_undo, self.act_redo])
         m.addSeparator()
@@ -628,25 +665,25 @@ class MainWindow(QMainWindow):
         m.addAction(self.act_word_count)
         m.addSeparator()
         m.addAction(self.act_follow_link)
-        sub = m.addMenu("&Insert")
+        sub = m.addMenu(tr("&Insert"))
         sub.addActions([self.act_link_file, self.act_link_folder])
         sub.addSeparator()
         sub.addAction(self.act_insert_file)
 
-        m = mb.addMenu("F&ormat")
+        m = mb.addMenu(tr("F&ormat"))
         m.addActions([self.act_bold, self.act_italic, self.act_underline, self.act_strike])
         m.addSeparator()
         m.addActions([self.act_text_color, self.act_highlight, self.act_char_font,
                       self.act_bigger, self.act_smaller])
-        sub = m.addMenu("Paragraph &Style")
+        sub = m.addMenu(tr("Paragraph &Style"))
         sub.addActions(list(self.act_styles.values()))
-        sub = m.addMenu("&Alignment")
+        sub = m.addMenu(tr("&Alignment"))
         sub.addActions(list(self.act_align.values()))
         m.addActions([self.act_bullets, self.act_numbers])
         m.addSeparator()
-        sub = m.addMenu("&Insert")
+        sub = m.addMenu(tr("&Insert"))
         sub.addActions([self.act_image, self.act_table, self.act_hr])
-        sub = m.addMenu("Ta&ble")
+        sub = m.addMenu(tr("Ta&ble"))
         sub.addActions([self.act_row, self.act_col, self.act_del_row, self.act_del_col])
         self.table_menu = sub
         m.addSeparator()
@@ -656,20 +693,24 @@ class MainWindow(QMainWindow):
         m.addSeparator()
         m.addActions([self.act_strip, self.act_strip_returns])
 
-        m = mb.addMenu("&Search")
+        m = mb.addMenu(tr("&Search"))
         m.addActions([self.act_find, self.act_search_tree, self.act_find_next, self.act_find_prev])
         m.addSeparator()
         m.addAction(self.act_replace)
 
-        m = mb.addMenu("&Node")
+        m = mb.addMenu(tr("&Node"))
         m.addActions(self._node_menu_actions())
 
-        m = mb.addMenu("&View")
+        m = mb.addMenu(tr("&View"))
         m.addActions(list(self.act_view_modes.values()))
         m.addSeparator()
         m.addActions([self.act_word_wrap, self.act_classic_tree])
-        sub = m.addMenu("&Theme")
+        sub = m.addMenu(tr("&Theme"))
         sub.addActions(list(self.act_themes.values()))
+        sub = m.addMenu(tr("&Language"))
+        sub.addAction(self.act_languages[i18n.AUTO])
+        sub.addSeparator()
+        sub.addActions([a for c, a in self.act_languages.items() if c != i18n.AUTO])
         m.addSeparator()
         m.addActions([self.act_focus, self.act_focus_out, self.act_unfocus])
         m.addSeparator()
@@ -678,29 +719,29 @@ class MainWindow(QMainWindow):
         m.addActions([self.act_expand_one, self.act_expand_branch, self.act_collapse_branch])
         m.addActions([self.act_expand_all, self.act_collapse_all])
         m.addSeparator()
-        panels = m.addMenu("&Panels")
+        panels = m.addMenu(tr("&Panels"))
         for panel, key in ((self.backlinks_panel, "Ctrl+Shift+B"), (self.tags_panel, "Ctrl+Shift+G")):
             act = panel.toggleViewAction()
             act.setShortcut(QKeySequence(key))
             panels.addAction(act)
         m.addSeparator()
         m.addActions([self.act_fonts, self.act_reset_fonts, self.act_pane_colors])
-        sub = m.addMenu("Text Si&ze")
+        sub = m.addMenu(tr("Text Si&ze"))
         sub.addActions([self.act_zoom_in, self.act_zoom_out, self.act_zoom_reset])
         sub.addSeparator()
         sub.addActions([self.act_tree_larger, self.act_tree_smaller, self.act_article_larger,
                         self.act_article_smaller])
-        sub = m.addMenu("Tree &Icon Size")
+        sub = m.addMenu(tr("Tree &Icon Size"))
         sub.addActions(list(self.act_tree_icon_sizes.values()))
         m.addSeparator()
         self.view_menu = m
         m.addAction(self.act_switch_pane)
 
-        m = mb.addMenu("&Options")
+        m = mb.addMenu(tr("&Options"))
         self.options_menu = m
-        sub = m.addMenu("At &Startup")
+        sub = m.addMenu(tr("At &Startup"))
         sub.addActions(list(self.act_startup.values()))
-        sub = m.addMenu("When &Closing With Unsaved Changes")
+        sub = m.addMenu(tr("When &Closing With Unsaved Changes"))
         sub.addActions(list(self.act_close_modes.values()))
         m.addSeparator()
         m.addActions([self.act_backup, self.act_autosave])
@@ -710,12 +751,12 @@ class MainWindow(QMainWindow):
         m.addAction(self.act_auto_paste)
         m.addSeparator()
         m.addAction(self.act_spell)
-        self.spell_lang_menu = m.addMenu("Spelling &Language")
+        self.spell_lang_menu = m.addMenu(tr("Spelling &Language"))
         self._fill_spell_languages()
         m.addSeparator()
         m.addActions([self.act_file_types, self.act_reset_settings])
 
-        m = mb.addMenu("&Help")
+        m = mb.addMenu(tr("&Help"))
         m.addAction(self.act_shortcuts)
         m.addSeparator()
         m.addActions([self.act_report_bug, self.act_request_feature])
@@ -732,7 +773,7 @@ class MainWindow(QMainWindow):
     def _node_menu_actions(self) -> List[QAction]:
         sep = lambda: self._separator()  # noqa: E731
         if not hasattr(self, "_look_menu"):
-            self._look_menu = QMenu("Icon and &Colour", self)
+            self._look_menu = QMenu(tr("Icon and &Colour"), self)
             self._look_menu.addActions(list(self.act_icons.values()))
             self._look_menu.addSeparator()
             self._look_menu.addActions(list(self.act_colors.values()))
@@ -755,16 +796,28 @@ class MainWindow(QMainWindow):
         a.setSeparator(True)
         return a
 
-    def _build_tree_menu(self) -> QMenu:
-        menu = QMenu(self)
-        menu.addActions(self._node_menu_actions())
-        # Styled menus can measure a long item ("Undo Delete “...”") too
-        # narrow, so its text runs into the shortcut column.
+    @staticmethod
+    def _fit_menu(menu: QMenu) -> None:
+        """Styled menus can measure a long item ("Undo Delete “...”", or a
+        long translation) too narrow, so its text runs into the shortcut
+        column. Make the menu wide enough for its longest item."""
         fm = menu.fontMetrics()
         widest = max((fm.horizontalAdvance(a.text().replace("&", "")) +
                       fm.horizontalAdvance(a.shortcut().toString(QKeySequence.NativeText))
-                      for a in menu.actions() if not a.isSeparator()), default=0)
-        menu.setMinimumWidth(min(widest + 120, 640))
+                      for a in menu.actions() if not a.isSeparator() and a.isVisible()), default=0)
+        menu.setMinimumWidth(min(widest + 120, 760))
+
+    def _fit_menus(self, menu: QMenu) -> None:
+        """Fit ``menu`` and its submenus each time they open."""
+        menu.aboutToShow.connect(lambda m=menu: self._fit_menu(m))
+        for a in menu.actions():
+            if a.menu() is not None:
+                self._fit_menus(a.menu())
+
+    def _build_tree_menu(self) -> QMenu:
+        menu = QMenu(self)
+        menu.addActions(self._node_menu_actions())
+        self._fit_menu(menu)
         return menu
 
     def _tree_menu(self, pos) -> None:
@@ -777,9 +830,9 @@ class MainWindow(QMainWindow):
         View > Toolbars to show or hide them; drag a handle to move one."""
         from PyQt5.QtWidgets import QToolButton
         S = QStyle
-        self.act_options = QAction(icons.themed_drawn("preferences-system", icons.wrench), "Options", self)
-        self.act_options.setToolTip("Options")
-        self.act_options.setStatusTip("Program options")
+        self.act_options = QAction(icons.themed_drawn("preferences-system", icons.wrench), tr("Options"), self)
+        self.act_options.setToolTip(tr("Options"))
+        self.act_options.setStatusTip(tr("Program options"))
         self.act_options.setMenu(self.options_menu)
         self.act_options.triggered.connect(self._show_options_menu)
         self.act_focus.setIcon(icons.themed("zoom-in", S.SP_FileDialogContentsView))
@@ -788,23 +841,23 @@ class MainWindow(QMainWindow):
         self.act_follow_link.setIcon(icons.themed_drawn("applications-internet", icons.globe))
         self._set_drawn_icons()
         bars = [
-            ("file-bar", "File", [self.act_new, self.act_open, self.act_save, self.act_print, None,
+            ("file-bar", tr("File"), [self.act_new, self.act_open, self.act_save, self.act_print, None,
                                   self.act_options]),
-            ("article-edit-bar", "Article Edit", [self.act_cut, self.act_copy, self.act_paste,
+            ("article-edit-bar", tr("Article Edit"), [self.act_cut, self.act_copy, self.act_paste,
                                                   self.act_delete_text]),
-            ("tree-edit-bar", "Tree Edit", [self.act_add_child, self.act_add_before, self.act_add_after,
+            ("tree-edit-bar", tr("Tree Edit"), [self.act_add_child, self.act_add_before, self.act_add_after,
                                             self.act_delete, self.act_rename]),
-            ("view-bar", "View", [self.act_find, self.act_search_tree, None,
+            ("view-bar", tr("View"), [self.act_find, self.act_search_tree, None,
                                   self.act_view_modes["both"], self.act_view_modes["tree"],
                                   self.act_view_modes["article"], None, self.act_word_wrap]),
-            ("navigate-bar", "Navigate", [self.act_follow_link, None, self.act_move_up, self.act_move_down,
+            ("navigate-bar", tr("Navigate"), [self.act_follow_link, None, self.act_move_up, self.act_move_down,
                                           self.act_move_left, self.act_move_right, None,
                                           self.act_expand_branch, self.act_collapse_branch]),
-            ("extras-bar", "Extras", [self.act_undo, self.act_redo, None, self.act_bold, self.act_italic,
+            ("extras-bar", tr("Extras"), [self.act_undo, self.act_redo, None, self.act_bold, self.act_italic,
                                       None, self.act_focus, self.act_unfocus]),
         ]
         self.toolbars = {}
-        sub = self.view_menu.addMenu("Tool&bars")
+        sub = self.view_menu.addMenu(tr("Tool&bars"))
         for name, title, acts in bars:
             tb = self.addToolBar(title)
             tb.setObjectName(name)
@@ -817,21 +870,21 @@ class MainWindow(QMainWindow):
             self.toolbars[name] = tb
             sub.addAction(tb.toggleViewAction())
         sub.addSeparator()
-        sizes = sub.addMenu("&Icon Size")
+        sizes = sub.addMenu(tr("&Icon Size"))
         self.icon_size_group = QActionGroup(self)
         self.act_icon_sizes = {}
         for label, px in TOOLBAR_ICON_SIZES.items():
-            act = QAction(f"{label} ({px} px)", self, checkable=True)
+            act = QAction(tr("{label} ({px} px)").format(label=tr(label), px=px), self, checkable=True)
             act.triggered.connect(lambda _c=False, n=px: self.set_toolbar_icon_size(n))
             self.icon_size_group.addAction(act)
             sizes.addAction(act)
             self.act_icon_sizes[px] = act
         self.set_toolbar_icon_size(DEFAULT_TOOLBAR_ICON_SIZE, remember=False)
-        labels = sub.addMenu("Button &Labels")
+        labels = sub.addMenu(tr("Button &Labels"))
         self.toolbar_label_group = QActionGroup(self)
         self.act_toolbar_labels = {}
         for key, (label, _style) in TOOLBAR_LABELS.items():
-            act = QAction(label, self, checkable=True)
+            act = QAction(tr(label), self, checkable=True)
             act.triggered.connect(lambda _c=False, k=key: self.set_toolbar_labels(k))
             self.toolbar_label_group.addAction(act)
             labels.addAction(act)
@@ -839,8 +892,8 @@ class MainWindow(QMainWindow):
         self._set_short_labels()
         self.set_toolbar_labels("icons", remember=False)
         sub.addSeparator()
-        sub.addAction(self._action("Show &All", lambda: self._show_toolbars(True)))
-        sub.addAction(self._action("&Hide All", lambda: self._show_toolbars(False)))
+        sub.addAction(self._action(tr("Show &All"), lambda: self._show_toolbars(True)))
+        sub.addAction(self._action(tr("&Hide All"), lambda: self._show_toolbars(False)))
         button = self.toolbars["file-bar"].widgetForAction(self.act_options)
         if isinstance(button, QToolButton):
             button.setPopupMode(QToolButton.InstantPopup)
@@ -889,17 +942,17 @@ class MainWindow(QMainWindow):
     def _set_short_labels(self) -> None:
         """Short names for buttons with labels; the tooltips keep the full names."""
         short = {
-            self.act_new: "New", self.act_open: "Open", self.act_save: "Save", self.act_print: "Print",
-            self.act_options: "Options", self.act_cut: "Cut", self.act_copy: "Copy", self.act_paste: "Paste",
-            self.act_delete_text: "Delete", self.act_add_child: "Child", self.act_add_before: "Before",
-            self.act_add_after: "After", self.act_delete: "Remove", self.act_rename: "Rename",
-            self.act_find: "Find", self.act_search_tree: "Search", self.act_view_modes["both"]: "Both",
-            self.act_view_modes["tree"]: "Tree", self.act_view_modes["article"]: "Article",
-            self.act_word_wrap: "Wrap", self.act_follow_link: "Link", self.act_move_up: "Up",
-            self.act_move_down: "Down", self.act_move_left: "Left", self.act_move_right: "Right",
-            self.act_expand_branch: "Expand", self.act_collapse_branch: "Collapse", self.act_undo: "Undo",
-            self.act_redo: "Redo", self.act_bold: "Bold", self.act_italic: "Italic", self.act_focus: "Focus",
-            self.act_unfocus: "Whole Tree",
+            self.act_new: tr("New"), self.act_open: tr("Open"), self.act_save: tr("Save"), self.act_print: tr("Print"),
+            self.act_options: tr("Options"), self.act_cut: tr("Cut"), self.act_copy: tr("Copy"), self.act_paste: tr("Paste"),
+            self.act_delete_text: tr("Delete"), self.act_add_child: tr("Child"), self.act_add_before: tr("Before"),
+            self.act_add_after: tr("After"), self.act_delete: tr("Remove"), self.act_rename: tr("Rename"),
+            self.act_find: tr("Find"), self.act_search_tree: tr("Search"), self.act_view_modes["both"]: tr("Both"),
+            self.act_view_modes["tree"]: tr("Tree"), self.act_view_modes["article"]: tr("Article"),
+            self.act_word_wrap: tr("Wrap"), self.act_follow_link: tr("Link"), self.act_move_up: tr("Up"),
+            self.act_move_down: tr("Down"), self.act_move_left: tr("Left"), self.act_move_right: tr("Right"),
+            self.act_expand_branch: tr("Expand"), self.act_collapse_branch: tr("Collapse"), self.act_undo: tr("Undo"),
+            self.act_redo: tr("Redo"), self.act_bold: tr("Bold"), self.act_italic: tr("Italic"), self.act_focus: tr("Focus"),
+            self.act_unfocus: tr("Whole Tree"),
         }
         for act, text in short.items():
             tip = act.toolTip()
@@ -919,10 +972,10 @@ class MainWindow(QMainWindow):
         sb = self.statusBar()
         self.nodes_label = QLabel()
         self.cursor_label = QLabel()
-        self.read_only_label = QLabel(" Read only ")
+        self.read_only_label = QLabel(" " + tr("Read only") + " ")
         self.read_only_label.setVisible(False)
         self.words_label = QLabel()
-        self.crypto_label = QLabel(" Password protected ")
+        self.crypto_label = QLabel(" " + tr("Password protected") + " ")
         self.crypto_label.setVisible(False)
         sb.addPermanentWidget(self.crypto_label)
         sb.addPermanentWidget(self.read_only_label)
@@ -1000,18 +1053,18 @@ class MainWindow(QMainWindow):
         self.settings.setValue("options/file_types_asked", True)
         if desktop.is_default():
             if not quiet:
-                popups.success(self, f"{APP_NAME} already opens .hjt files",
-                               "Double-click a .hjt or .twig file in your file manager to open it here.")
+                popups.success(self, tr("{APP_NAME} already opens .hjt files").format(APP_NAME=APP_NAME),
+                               tr("Double-click a .hjt or .twig file in your file manager to open it here."))
             return True
         try:
             desktop.make_default()
         except OSError as exc:
-            popups.warning(self, "Could not change the default app", str(exc))
+            popups.warning(self, tr("Could not change the default app"), str(exc))
             return False
         if not quiet:
-            popups.success(self, f".hjt files now open with {APP_NAME}",
-                           "Double-click a .hjt or .twig file in your file manager to open it here. "
-                           "To choose another app later, right-click a file and use Open With.")
+            popups.success(self, tr(".hjt files now open with {APP_NAME}").format(APP_NAME=APP_NAME),
+                           tr("Double-click a .hjt or .twig file in your file manager to open it here. "
+                           "To choose another app later, right-click a file and use Open With."))
         return True
 
     def offer_file_association(self) -> None:
@@ -1022,24 +1075,21 @@ class MainWindow(QMainWindow):
         self.settings.setValue("options/file_types_asked", True)
         if desktop.is_default():
             return
-        if popups.confirm(self, f"Open .hjt files with {APP_NAME}?",
-                          f"Then double-clicking a .hjt or .twig notes file in your file manager opens it "
-                          f"in {APP_NAME}. You can change this later in Options.",
-                          ok=f"Use {APP_NAME}", cancel="Not Now"):
+        if popups.confirm(self, tr("Open .hjt files with {APP_NAME}?").format(APP_NAME=APP_NAME),
+                          tr("Then double-clicking a .hjt or .twig notes file in your file manager opens it in {APP_NAME}. You can change this later in Options.").format(APP_NAME=APP_NAME),
+                          ok=tr("Use {APP_NAME}").format(APP_NAME=APP_NAME), cancel=tr("Not Now")):
             self.make_file_default()
 
     # Kept by Reset All Settings: they are the user's data, not options.
-    KEEP_ON_RESET = ("files/recent", "files/last_dir", "spell/words", "options/file_types_asked")
+    KEEP_ON_RESET = ("files/recent", "files/last_dir", "spell/words", "options/file_types_asked", "view/language")
 
     def reset_settings(self, confirm: bool = True) -> bool:
         """Every option back to its default; notes, recent files and the
         spelling words you added are kept."""
         if confirm and not popups.confirm(
-                self, "Reset all settings?",
-                "Theme, fonts, text sizes, toolbars, colours, window layout and every option go back "
-                f"to how they were when {APP_NAME} was installed. Your notes files, the recent files "
-                "list and the words you added to the dictionary are kept.",
-                ok="Reset Settings", danger=True, kind=popups.WARNING, default_ok=False):
+                self, tr("Reset all settings?"),
+                tr("Theme, fonts, text sizes, toolbars, colours, window layout and every option go back to how they were when {APP_NAME} was installed. Your notes files, the recent files list and the words you added to the dictionary are kept.").format(APP_NAME=APP_NAME),
+                ok=tr("Reset Settings"), danger=True, kind=popups.WARNING, default_ok=False):
             return False
         kept = {key: self.settings.value(key) for key in self.KEEP_ON_RESET if self.settings.contains(key)}
         self.settings.clear()
@@ -1055,7 +1105,7 @@ class MainWindow(QMainWindow):
         self.showNormal()
         self.reload_settings()
         self.splitter.setSizes([300, 700])
-        self.statusBar().showMessage("All settings are back to their defaults.", 6000)
+        self.statusBar().showMessage(tr("All settings are back to their defaults."), 6000)
         return True
 
     def make_backup(self, zip_path: Optional[str] = None) -> bool:
@@ -1097,9 +1147,9 @@ class MainWindow(QMainWindow):
             act.triggered.connect(lambda _c=False, p=path: self.open_file(p))
         if files:
             self.recent_menu.addSeparator()
-            self.recent_menu.addAction("&Clear List", lambda: self.settings.setValue("files/recent", []))
+            self.recent_menu.addAction(tr("&Clear List"), lambda: self.settings.setValue("files/recent", []))
         else:
-            self.recent_menu.addAction("(no recent files)").setEnabled(False)
+            self.recent_menu.addAction(tr("(no recent files)")).setEnabled(False)
 
     def startup_mode(self) -> str:
         return next((m for m, a in self.act_startup.items() if a.isChecked()), "reopen")
@@ -1121,16 +1171,16 @@ class MainWindow(QMainWindow):
                 self.load_path(choice)
 
     def _ask_reopen(self, name: str) -> bool:
-        return popups.confirm(self, "Open the last file?", f"\"{name}\" was open when you last used {APP_NAME}.",
-                              ok="Open", cancel="Not Now")
+        return popups.confirm(self, tr("Open the last file?"), tr("\"{name}\" was open when you last used {APP_NAME}.").format(name=name, APP_NAME=APP_NAME),
+                              ok=tr("Open"), cancel=tr("Not Now"))
 
     def _quick_start(self) -> Optional[str]:
         """The Quick Start window: 'new', 'open', a file path, or None."""
         from PyQt5.QtWidgets import QCheckBox, QListWidget
         dlg = QDialog(self)
-        dlg.setWindowTitle(f"{APP_NAME} - Quick Start")
+        dlg.setWindowTitle(tr("{APP_NAME} - Quick Start").format(APP_NAME=APP_NAME))
         lay = QVBoxLayout(dlg)
-        lay.addWidget(QLabel("Open a recent file (double-click), or start something new:"))
+        lay.addWidget(QLabel(tr("Open a recent file (double-click), or start something new:")))
         recent = QListWidget()
         for path in self.recent_files():
             if os.path.exists(path):
@@ -1143,14 +1193,14 @@ class MainWindow(QMainWindow):
             dlg.accept()
         recent.itemActivated.connect(lambda it: done(it.text()))
         row = QDialogButtonBox()
-        for label, choice in (("&New File", "new"), ("&Open...", "open")):
+        for label, choice in ((tr("&New File"), "new"), (tr("&Open..."), "open")):
             row.addButton(label, QDialogButtonBox.ActionRole).clicked.connect(
                 lambda _c=False, c=choice: done(c))
-        open_btn = row.addButton("Open &Selected", QDialogButtonBox.AcceptRole)
+        open_btn = row.addButton(tr("Open &Selected"), QDialogButtonBox.AcceptRole)
         open_btn.clicked.connect(lambda: recent.currentItem() and done(recent.currentItem().text()))
         row.addButton(QDialogButtonBox.Close).clicked.connect(dlg.reject)
         lay.addWidget(row)
-        again = QCheckBox("Show this window at startup")
+        again = QCheckBox(tr("Show this window at startup"))
         again.setChecked(True)
         lay.addWidget(again)
         if recent.count():
@@ -1219,7 +1269,7 @@ class MainWindow(QMainWindow):
             return
         title = " ".join(item.text(0).split())
         if not title:
-            title = "Untitled"
+            title = tr("Untitled")
         if title != item.text(0):
             self._loading = True
             item.setText(0, title)
@@ -1242,7 +1292,7 @@ class MainWindow(QMainWindow):
         recovery.remove(self._recovery_id)
 
     def _display_name(self) -> str:
-        return os.path.basename(self.path) if self.path else (self.source_name or "Untitled")
+        return os.path.basename(self.path) if self.path else (self.source_name or tr("Untitled"))
 
     def write_recovery(self) -> bool:
         """Keep a copy of unsaved changes, in case Twigpad or the computer
@@ -1266,17 +1316,16 @@ class MainWindow(QMainWindow):
         entry = entries[0]
         when = QLocale().toString(QDateTime.fromString(entry.saved, Qt.ISODate), QLocale.ShortFormat)
         more = len(entries) - 1
-        extra = f" {more} more {'copies are' if more > 1 else 'copy is'} kept for the next start." if more else ""
+        extra = (" " + tr("Other recovered copies kept for the next start: {n}.").format(n=more)) if more else ""
         answer = popups.show(
-            self, popups.WARNING, "Recover unsaved changes?",
-            f"{APP_NAME} was closed unexpectedly while \"{entry.name}\" had changes that were not "
-            f"saved. A copy from {when} was kept. Open it to check it, then save it.{extra}",
-            (("discard", "Discard Changes", popups.NORMAL), ("later", "Not Now", popups.CANCEL),
-             ("recover", "Recover", popups.PRIMARY)), "recover")
+            self, popups.WARNING, tr("Recover unsaved changes?"),
+            tr("{app} was closed unexpectedly while “{name}” had changes that were not saved. A copy from {when} was kept. Open it to check it, then save it.").format(app=APP_NAME, name=entry.name, when=when) + extra,
+            (("discard", tr("Discard Changes"), popups.NORMAL), ("later", tr("Not Now"), popups.CANCEL),
+             ("recover", tr("Recover"), popups.PRIMARY)), "recover")
         if answer == "discard":
-            if popups.confirm(self, "Discard the unsaved changes?",
-                              f"The recovered copy of \"{entry.name}\" will be deleted.",
-                              ok="Discard", danger=True, kind=popups.WARNING, default_ok=False):
+            if popups.confirm(self, tr("Discard the unsaved changes?"),
+                              tr("The recovered copy of \"{name}\" will be deleted.").format(name=entry.name),
+                              ok=tr("Discard"), danger=True, kind=popups.WARNING, default_ok=False):
                 recovery.remove(entry.id)
             return False
         if answer != "recover":
@@ -1301,7 +1350,7 @@ class MainWindow(QMainWindow):
         self.write_recovery()          # this window's own copy, before the old one goes
         recovery.remove(entry.id)
         self.statusBar().showMessage(
-            f"Recovered the unsaved changes of {entry.name}. Check them, then save.", 10000)
+            tr("Recovered the unsaved changes of {name}. Check them, then save.").format(name=entry.name), 10000)
         return True
 
     # ========================================================= tree undo
@@ -1349,8 +1398,8 @@ class MainWindow(QMainWindow):
             return
         hist, ok = self.tree_history, not self.read_only
         undo_label, redo_label = hist.undo_label(), hist.redo_label()
-        self.act_tree_undo.setText(f"&Undo {undo_label}" if undo_label else "&Undo")
-        self.act_tree_redo.setText(f"&Redo {redo_label}" if redo_label else "&Redo")
+        self.act_tree_undo.setText(tr("&Undo {label}").format(label=undo_label) if undo_label else tr("&Undo"))
+        self.act_tree_redo.setText(tr("&Redo {label}").format(label=redo_label) if redo_label else tr("&Redo"))
         self.act_tree_undo.setEnabled(ok and hist.can_undo())
         self.act_tree_redo.setEnabled(ok and hist.can_redo())
         if self._undo_pane() == "tree":
@@ -1360,8 +1409,8 @@ class MainWindow(QMainWindow):
             self.act_redo.setEnabled(self.act_tree_redo.isEnabled())
         else:
             doc = self.editor.document()
-            self.act_undo.setText("&Undo Typing" if doc.isUndoAvailable() else "&Undo")
-            self.act_redo.setText("&Redo Typing" if doc.isRedoAvailable() else "&Redo")
+            self.act_undo.setText(tr("&Undo Typing") if doc.isUndoAvailable() else tr("&Undo"))
+            self.act_redo.setText(tr("&Redo Typing") if doc.isRedoAvailable() else tr("&Redo"))
             self.act_undo.setEnabled(ok and doc.isUndoAvailable())
             self.act_redo.setEnabled(ok and doc.isRedoAvailable())
         for act in (self.act_undo, self.act_redo, self.act_tree_undo, self.act_tree_redo):
@@ -1392,7 +1441,7 @@ class MainWindow(QMainWindow):
             return False   # the rename box has its own Undo
         change = self.tree_history.take_undo() if undo else self.tree_history.take_redo()
         if change is None:
-            self.statusBar().showMessage(f"Nothing to {'undo' if undo else 'redo'} in the tree.", 3000)
+            self.statusBar().showMessage((tr("Nothing to undo in the tree.") if undo else tr("Nothing to redo in the tree.")), 3000)
             return False
         self._commit_editor()
         self._editing_item = None
@@ -1426,8 +1475,8 @@ class MainWindow(QMainWindow):
         self.setWindowModified(True)
         self.info_timer.start()
         self._update_undo_actions()
-        word = "Undid" if undo else "Redid"
-        self.statusBar().showMessage(f"{word}: {change.label}", 3000)
+        done = tr("Undone: {label}") if undo else tr("Redone: {label}")
+        self.statusBar().showMessage(done.format(label=change.label), 3000)
         return True
 
     def _on_structure_changed(self) -> None:
@@ -1473,11 +1522,11 @@ class MainWindow(QMainWindow):
         self.act_new_tab.setEnabled(has)
         self.act_close_tab.setEnabled(self.tabs.count() > 1)
         n = len(self.tree.all_items())
-        self.nodes_label.setText(f" {n} node{'s' if n != 1 else ''} ")
+        self.nodes_label.setText(" " + ntr("{n} node", "{n} nodes", n).format(n=n) + " ")
 
     def _update_cursor_label(self) -> None:
         c = self.editor.textCursor()
-        self.cursor_label.setText(f" Ln {c.blockNumber() + 1}, Col {c.positionInBlock() + 1} ")
+        self.cursor_label.setText(" " + tr("Ln {line}, Col {column}").format(line=c.blockNumber() + 1, column=c.positionInBlock() + 1) + " ")
 
     # =========================================================== node ops
 
@@ -1485,8 +1534,9 @@ class MainWindow(QMainWindow):
         self.tree.scrollToItem(item)
         self.tree.editItem(item, 0)
 
-    def _top_word(self) -> str:
-        return "focused" if self.tree.hoisted is not None else "top"
+    def _top_say(self, top: str, focused: str) -> str:
+        """The message about the top node, or about the focused branch's node."""
+        return focused if self.tree.hoisted is not None else top
 
     def add_node_after(self) -> None:
         self._add_sibling(after=True)
@@ -1498,7 +1548,7 @@ class MainWindow(QMainWindow):
         item = self.tree.add_sibling(after=after)
         if item is None:
             self.statusBar().showMessage(
-                f"The {self._top_word()} node can't have nodes next to it. Use Ins to add a child node.", 5000)
+                self._top_say(tr("The top node can't have nodes next to it. Use Ins to add a child node."), tr("The focused node can't have nodes next to it. Use Ins to add a child node.")), 5000)
         else:
             self._start_rename(item)
 
@@ -1515,21 +1565,23 @@ class MainWindow(QMainWindow):
         if item is None:
             return
         if self.tree.is_view_top(item):
-            self.statusBar().showMessage(f"The {self._top_word()} node can't be deleted.", 4000)
+            self.statusBar().showMessage(self._top_say(tr("The top node can't be deleted."), tr("The focused node can't be deleted.")), 4000)
             return
         if confirm:
             inner = len(NoteTree.all_items_under(item)) - 1
-            extra = (f" It contains {inner} other node{'s' if inner != 1 else ''}, "
-                     "which will also be deleted.") if inner else ""
-            if not popups.confirm(self, f"Delete \"{item.title}\"?",
-                                  f"The node and its article will be deleted.{extra} "
-                                  "You can bring it back with Undo (Ctrl+Z in the tree).",
-                                  ok="Delete", danger=True, kind=popups.WARNING, default_ok=False):
+            extra = (" " + ntr("It contains {n} other node, which will also be deleted.",
+                               "It contains {n} other nodes, which will also be deleted.", inner).format(n=inner)
+                     ) if inner else ""
+            if not popups.confirm(self, tr("Delete \"{title}\"?").format(title=item.title),
+                                  tr("The node and its article will be deleted.") + extra + " " +
+                                  tr("You can bring it back with Undo (Ctrl+Z in the tree)."),
+                                  ok=tr("Delete"), danger=True, kind=popups.WARNING, default_ok=False):
                 return
         self._remove(item)
 
-    def _remove(self, item: NoteItem, verb: str = "Delete") -> None:
-        with self.tree_change(f"{verb} {short(item.title)}"):   # keeps the article's latest text
+    def _remove(self, item: NoteItem, cut: bool = False) -> None:
+        label = tr("Cut {name}") if cut else tr("Delete {name}")
+        with self.tree_change(label.format(name=short(item.title))):   # keeps the article's latest text
             if item is self._editing_item or NoteTree.is_ancestor(item, self._editing_item):
                 self._editing_item = None
             self.tree.remove_item(item)
@@ -1550,24 +1602,24 @@ class MainWindow(QMainWindow):
         mime.setText(export.outline_text([node], numbered=False))
         QApplication.clipboard().setMimeData(mime)
         n = node.count()
-        self.statusBar().showMessage(f"Copied {n} node{'s' if n != 1 else ''}.", 4000)
+        self.statusBar().showMessage(ntr("Copied {n} node.", "Copied {n} nodes.", n).format(n=n), 4000)
         return True
 
     def cut_node(self) -> None:
         item = self.tree.currentItem()
         if self.tree.is_view_top(item):
-            self.statusBar().showMessage(f"The {self._top_word()} node can't be cut; use Copy instead.", 4000)
+            self.statusBar().showMessage(self._top_say(tr("The top node can't be cut; use Copy instead."), tr("The focused node can't be cut; use Copy instead.")), 4000)
             return
         if item is not None and self.copy_node():
-            self._remove(item, "Cut")
+            self._remove(item, cut=True)
 
     def copy_node_link(self) -> None:
         item = self.tree.currentItem()
         if item is None:
             return
         address = links.node_address(self.tree.title_path(item))
-        QApplication.clipboard().setText(f"[{address}]")
-        self.statusBar().showMessage(f"Copied link: [{address}]", 5000)
+        QApplication.clipboard().setText(tr("[{address}]").format(address=address))
+        self.statusBar().showMessage(tr("Copied link: [{address}]").format(address=address), 5000)
 
     def _clipboard_nodes(self) -> List[Node]:
         mime = QApplication.clipboard().mimeData()
@@ -1599,9 +1651,9 @@ class MainWindow(QMainWindow):
             return
         nodes = self._clipboard_nodes()
         if not nodes:
-            self.statusBar().showMessage("Nothing to paste.", 3000)
+            self.statusBar().showMessage(tr("Nothing to paste."), 3000)
             return
-        with self.tree_change("Paste"):
+        with self.tree_change(tr("Paste")):
             self._insert_under_current(nodes, as_child)
 
     def _insert_under_current(self, nodes: List[Node], as_child: bool = True) -> None:
@@ -1610,7 +1662,7 @@ class MainWindow(QMainWindow):
         cur = self.tree.currentItem() or self.tree.topLevelItem(0)
         if cur is None:  # empty tree: the first node becomes the top node
             if len(nodes) > 1:
-                wrapper = Node("Notes")
+                wrapper = Node(tr("Notes"))
                 for n in nodes:
                     wrapper.add_child(n)
                 nodes = [wrapper]
@@ -1628,7 +1680,7 @@ class MainWindow(QMainWindow):
     def sort_whole_tree(self) -> None:
         if not self._writable():
             return
-        with self.tree_change("Sort Whole Tree"):
+        with self.tree_change(tr("Sort Whole Tree")):
             for i in range(self.tree.topLevelItemCount()):
                 self.tree.sort_children(self.tree.topLevelItem(i), recursive=True)
 
@@ -1637,25 +1689,25 @@ class MainWindow(QMainWindow):
             return 0
         n = self.tree.move_next_siblings_right()
         if n:
-            self.statusBar().showMessage(f"Moved {n} node{'s' if n != 1 else ''} inside the selected node.", 4000)
+            self.statusBar().showMessage(ntr("Moved {n} node inside the selected node.", "Moved {n} nodes inside the selected node.", n).format(n=n), 4000)
         return n
 
     def move_children_left(self) -> int:
         if not self._writable():
             return 0
         if self.tree.is_view_top(self.tree.currentItem()):
-            self.statusBar().showMessage(f"The nodes inside the {self._top_word()} node can't move out of it.", 4000)
+            self.statusBar().showMessage(self._top_say(tr("The nodes inside the top node can't move out of it."), tr("The nodes inside the focused node can't move out of it.")), 4000)
             return 0
         n = self.tree.move_children_left()
         if n:
-            self.statusBar().showMessage(f"Moved {n} node{'s' if n != 1 else ''} out one level.", 4000)
+            self.statusBar().showMessage(ntr("Moved {n} node out one level.", "Moved {n} nodes out one level.", n).format(n=n), 4000)
         return n
 
     def copy_node_name(self) -> None:
         item = self.tree.currentItem()
         if item is not None:
             QApplication.clipboard().setText(item.title)
-            self.statusBar().showMessage(f"Copied node name: {item.title}", 4000)
+            self.statusBar().showMessage(tr("Copied node name: {title}").format(title=item.title), 4000)
 
     def paste_node_name(self) -> bool:
         item = self.tree.currentItem()
@@ -1664,9 +1716,9 @@ class MainWindow(QMainWindow):
         text = QApplication.clipboard().text()
         title = next((" ".join(line.split()) for line in text.splitlines() if line.strip()), "")
         if not title:
-            self.statusBar().showMessage("There is no text on the clipboard.", 3000)
+            self.statusBar().showMessage(tr("There is no text on the clipboard."), 3000)
             return False
-        with self.tree_change("Paste Node Name"):
+        with self.tree_change(tr("Paste Node Name")):
             item.setText(0, title[:200])
         return True
 
@@ -1700,7 +1752,7 @@ class MainWindow(QMainWindow):
 
     def _writable(self) -> bool:
         if self.read_only:
-            self.statusBar().showMessage("The file is read only (File > Read Only).", 4000)
+            self.statusBar().showMessage(tr("The file is read only (File > Read Only)."), 4000)
             return False
         return True
 
@@ -1739,9 +1791,9 @@ class MainWindow(QMainWindow):
             self._tray = QSystemTrayIcon(icons.app_icon(), self)
             self._tray.setToolTip(APP_NAME)
             menu = QMenu(self)
-            menu.addAction(f"&Show {APP_NAME}", self.restore_from_tray)
+            menu.addAction(tr("&Show {APP_NAME}").format(APP_NAME=APP_NAME), self.restore_from_tray)
             menu.addSeparator()
-            menu.addAction("E&xit", lambda: (self.restore_from_tray(), self.close()))
+            menu.addAction(tr("E&xit"), lambda: (self.restore_from_tray(), self.close()))
             self._tray.setContextMenu(menu)
             self._tray.activated.connect(self._on_tray_activated)
         self._tray.show()
@@ -1765,7 +1817,7 @@ class MainWindow(QMainWindow):
         self._last_auto_paste = QApplication.clipboard().text() if on else ""
         if on:
             self.statusBar().showMessage(
-                "Automatic Paste is on: text you copy in other programs is added to this article.", 6000)
+                tr("Automatic Paste is on: text you copy in other programs is added to this article."), 6000)
 
     def _clipboard_is_ours(self) -> bool:
         return QApplication.clipboard().ownsClipboard()
@@ -1821,7 +1873,7 @@ class MainWindow(QMainWindow):
         if root is not None:
             return root.title
         top = self.tree.topLevelItem(0)
-        return top.title if top is not None else "Notes"
+        return top.title if top is not None else tr("Notes")
 
     def _update_tab_titles(self) -> None:
         for i, view in enumerate(self._views):
@@ -1829,7 +1881,7 @@ class MainWindow(QMainWindow):
                 view["root"] = None
             self.tabs.setTabText(i, self._tab_title(view))
             self.tabs.setTabToolTip(i, " / ".join(self.tree.title_path(view["root"]))
-                                    if view["root"] is not None else "Whole tree")
+                                    if view["root"] is not None else tr("Whole tree"))
         self.tabs.setVisible(self.tabs.count() > 1)
         if self.tree.hoisted is None and self._views and \
                 self._views[self.tabs.currentIndex()]["root"] is None:
@@ -1956,9 +2008,9 @@ class MainWindow(QMainWindow):
         cursor = self.editor.textCursor()
         if cursor.hasSelection():
             n = self.count_words(cursor.selectedText().replace(" ", "\n"))
-            self.words_label.setText(f" {n} of {total} words ")
+            self.words_label.setText(" " + tr("{n} of {total} words").format(n=n, total=total) + " ")
         else:
-            self.words_label.setText(f" {total} word{'s' if total != 1 else ''} ")
+            self.words_label.setText(" " + ntr("{n} word", "{n} words", total).format(n=total) + " ")
 
     def word_counts(self) -> List[tuple]:
         """Rows of (what, words, characters, nodes) for the Word Count window."""
@@ -1966,17 +2018,17 @@ class MainWindow(QMainWindow):
         cursor = self.editor.textCursor()
         if cursor.hasSelection():
             sel = cursor.selectedText().replace(" ", "\n")
-            rows.append(("Selection", self.count_words(sel), len(sel), None))
+            rows.append((tr("Selection"), self.count_words(sel), len(sel), None))
         cur = self.tree.currentItem()
         if cur is not None:
             body = self._body(cur)
-            rows.append(("This note", self.count_words(body), len(body), 1))
+            rows.append((tr("This note"), self.count_words(body), len(body), 1))
             items = NoteTree.all_items_under(cur)
             texts = [it.title + "\n" + self._body(it) for it in items]
-            rows.append(("This note and its subnotes", sum(self.count_words(t) for t in texts),
+            rows.append((tr("This note and its subnotes"), sum(self.count_words(t) for t in texts),
                          sum(len(self._body(it)) for it in items), len(items)))
         items = self.tree.all_items()
-        rows.append(("Whole file", sum(self.count_words(it.title + "\n" + self._body(it)) for it in items),
+        rows.append((tr("Whole file"), sum(self.count_words(it.title + "\n" + self._body(it)) for it in items),
                      sum(len(self._body(it)) for it in items), len(items)))
         return rows
 
@@ -1988,11 +2040,11 @@ class MainWindow(QMainWindow):
             f"<td align='right'>{'' if n is None else loc.toString(n)}</td></tr>"
             for what, w, c, n in self.word_counts())
         popups.info(
-            self, "Word Count",
-            "<table cellspacing='0' cellpadding='4'>"
-            "<tr><th></th><th align='right'>Words</th><th align='right'>Characters</th>"
-            f"<th align='right'>Notes</th></tr>{cells}</table>"
-            "<p><small>Totals for several notes include the note titles.</small></p>", rich=True)
+            self, tr("Word Count"),
+            ("<table cellspacing='0' cellpadding='4'><tr><th></th><th align='right'>{}</th><th align='right'>{}</th>"
+             "<th align='right'>{}</th></tr>{}</table><p><small>{}</small></p>").format(
+                tr("Words"), tr("Characters"), tr("Notes"), cells,
+                tr("Totals for several notes include the note titles.")), rich=True)
 
     # ===================================================== changed on disk
 
@@ -2036,7 +2088,7 @@ class MainWindow(QMainWindow):
                 self._disk_stamp = None
                 self.setWindowModified(True)
                 self.statusBar().showMessage(
-                    f"\"{name}\" was deleted or moved by another program. Save writes it again.", 15000)
+                    tr("\"{name}\" was deleted or moved by another program. Save writes it again.").format(name=name), 15000)
                 return
             if self._ask_reload(name, self.isWindowModified()):
                 self.load_path(path)
@@ -2049,16 +2101,15 @@ class MainWindow(QMainWindow):
             self._checking_disk = False
 
     def _ask_reload(self, name: str, modified: bool) -> bool:
-        extra = " Your unsaved changes here will be lost." if modified else ""
-        return popups.confirm(self, f"\"{name}\" was changed by another program",
-                              f"Reload it to see the other program's changes?{extra}",
-                              ok="Reload", cancel="Keep Mine", danger=modified, default_ok=not modified)
+        extra = (" " + tr("Your unsaved changes here will be lost.")) if modified else ""
+        return popups.confirm(self, tr("\"{name}\" was changed by another program").format(name=name),
+                              tr("Reload it to see the other program's changes?") + extra,
+                              ok=tr("Reload"), cancel=tr("Keep Mine"), danger=modified, default_ok=not modified)
 
     def _confirm_overwrite(self, name: str) -> bool:
-        return popups.confirm(self, "Replace the other program's changes?",
-                              f"\"{name}\" was changed by another program after you opened it. "
-                              "Saving now replaces those changes.",
-                              ok="Save Anyway", danger=True, kind=popups.WARNING, default_ok=False)
+        return popups.confirm(self, tr("Replace the other program's changes?"),
+                              tr("\"{name}\" was changed by another program after you opened it. Saving now replaces those changes.").format(name=name),
+                              ok=tr("Save Anyway"), danger=True, kind=popups.WARNING, default_ok=False)
 
     # ======================================================= spell checking
 
@@ -2095,9 +2146,9 @@ class MainWindow(QMainWindow):
             self.act_spell_langs[current].setChecked(True)
         ok = bool(langs) and spell.library_available()
         self.act_spell.setEnabled(ok)
-        self.act_spell.setStatusTip("Underline misspelled words in articles" if ok else
-                                    "Spell checking needs the Hunspell library and a dictionary "
-                                    "(Options → Spelling Language → Download Languages)")
+        self.act_spell.setStatusTip(tr("Underline misspelled words in articles") if ok else
+                                    tr("Spell checking needs the Hunspell library and a dictionary "
+                                       "(Options → Spelling Language → Download Languages)"))
 
     def refresh_spell_languages(self, select: Optional[str] = None) -> None:
         """After a dictionary was downloaded or removed."""
@@ -2160,7 +2211,7 @@ class MainWindow(QMainWindow):
         extra = []
         link = self.link_at_cursor(cursor)
         if link:
-            act = QAction("Open Link", menu)
+            act = QAction(tr("Open Link"), menu)
             act.triggered.connect(lambda _c=False, ln=link: self.follow_link(ln))
             extra.append(act)
         found = self._word_at(cursor) if self.speller is not None and not self.read_only else None
@@ -2175,10 +2226,10 @@ class MainWindow(QMainWindow):
                 act.triggered.connect(lambda _c=False, s=s, a=start, b=end: self._replace_word(a, b, s))
                 extra.append(act)
             if not suggestions:
-                none = QAction("(no suggestions)", menu)
+                none = QAction(tr("(no suggestions)"), menu)
                 none.setEnabled(False)
                 extra.append(none)
-            add = QAction(f"Add “{word}” to Dictionary", menu)
+            add = QAction(tr("Add “{word}” to Dictionary").format(word=word), menu)
             add.triggered.connect(lambda _c=False, w=word: self.add_to_dictionary(w))
             extra.append(add)
         if extra:
@@ -2186,7 +2237,7 @@ class MainWindow(QMainWindow):
             menu.insertSeparator(first)
         menu.addSeparator()
         menu.addActions([self.act_find, self.act_find_next])
-        nav = menu.addMenu("&Navigate")
+        nav = menu.addMenu(tr("&Navigate"))
         nav.addActions([self.act_goto_start, self.act_goto_end, self.act_follow_link])
         menu.exec_(self.editor.viewport().mapToGlobal(pos))
         menu.deleteLater()
@@ -2210,7 +2261,7 @@ class MainWindow(QMainWindow):
         self.setWindowModified(True)
         if self.path and self.path.lower().endswith(".hjt") and self._plain_ok_path != self.path:
             self.statusBar().showMessage(
-                "This note now has formatting, which is kept in .twig files. Save will ask.", 8000)
+                tr("This note now has formatting, which is kept in .twig files. Save will ask."), 8000)
 
     def _rich_ready(self) -> bool:
         if not self.editor.isEnabled() or not self._writable():
@@ -2237,15 +2288,15 @@ class MainWindow(QMainWindow):
             fmt.setFontStrikeOut(not cur.fontStrikeOut())
         self._merge(fmt)
 
-    def _pick_color(self, initial: QColor, title: str = "Colour") -> QColor:
-        return QColorDialog.getColor(initial, self, title)
+    def _pick_color(self, initial: QColor, title: str = "") -> QColor:
+        return QColorDialog.getColor(initial, self, title or tr("Colour"))
 
     def choose_color(self, background: bool) -> None:
         if not self._rich_ready():
             return
         cur = self.editor.currentCharFormat()
         initial = cur.background().color() if background else cur.foreground().color()
-        color = self._pick_color(initial, "Highlight Colour" if background else "Text Colour")
+        color = self._pick_color(initial, tr("Highlight Colour") if background else tr("Text Colour"))
         if color.isValid():
             fmt = QTextCharFormat()
             if background:
@@ -2257,7 +2308,7 @@ class MainWindow(QMainWindow):
     def choose_char_font(self) -> None:
         if not self._rich_ready():
             return
-        font, ok = QFontDialog.getFont(self.editor.currentFont(), self, "Font")
+        font, ok = QFontDialog.getFont(self.editor.currentFont(), self, tr("Font"))
         if ok:
             fmt = QTextCharFormat()
             fmt.setFont(font)
@@ -2331,18 +2382,18 @@ class MainWindow(QMainWindow):
         if not self.editor.isEnabled() or not self._writable():
             return False
         if path is None:
-            path, _ = QFileDialog.getOpenFileName(self, "Insert Picture", self._last_dir(), IMAGE_FILTERS)
+            path, _ = QFileDialog.getOpenFileName(self, tr("Insert Picture"), self._last_dir(), image_filters())
             if not path:
                 return False
         try:
             with open(path, "rb") as fh:
                 data = fh.read()
         except OSError as exc:
-            popups.error(self, "Could not read the picture", path, details=str(exc))
+            popups.error(self, tr("Could not read the picture"), path, details=str(exc))
             return False
         self.make_rich()
         if not self.editor.insert_image(data):
-            popups.warning(self, "Not a picture", f"\"{os.path.basename(path)}\" is not a picture {APP_NAME} can show.")
+            popups.warning(self, tr("Not a picture"), tr("\"{name}\" is not a picture {APP_NAME} can show.").format(name=os.path.basename(path), APP_NAME=APP_NAME))
             return False
         self.editor.setFocus()
         return True
@@ -2350,7 +2401,7 @@ class MainWindow(QMainWindow):
     def _ask_table_size(self):
         from PyQt5.QtWidgets import QSpinBox
         dlg = QDialog(self)
-        dlg.setWindowTitle("Insert Table")
+        dlg.setWindowTitle(tr("Insert Table"))
         rows, cols = QSpinBox(), QSpinBox()
         for box, value in ((rows, 3), (cols, 3)):
             box.setRange(1, 50)
@@ -2392,7 +2443,7 @@ class MainWindow(QMainWindow):
         cursor = self.editor.textCursor()
         table = cursor.currentTable()
         if table is None:
-            self.statusBar().showMessage("Put the cursor in a table first.", 4000)
+            self.statusBar().showMessage(tr("Put the cursor in a table first."), 4000)
             return False
         cell = table.cellAt(cursor)
         row, col = cell.row(), cell.column()
@@ -2440,7 +2491,7 @@ class MainWindow(QMainWindow):
             return
         cursor = self.editor.textCursor()
         if not cursor.hasSelection():
-            self.statusBar().showMessage("Select the text to clear first.", 4000)
+            self.statusBar().showMessage(tr("Select the text to clear first."), 4000)
             return
         edit = QTextCursor(self.editor.document())
         edit.beginEditBlock()
@@ -2453,10 +2504,10 @@ class MainWindow(QMainWindow):
         edit.endEditBlock()
 
     def _confirm_make_plain(self, pictures: bool) -> bool:
-        extra = " and pictures" if pictures else ""
-        return popups.confirm(self, "Convert to plain text?",
-                              f"All formatting{extra} will be removed from this note.",
-                              ok="Remove Formatting", danger=True, default_ok=False)
+        return popups.confirm(self, tr("Convert to plain text?"),
+                              tr("All formatting and pictures will be removed from this note.") if pictures
+                              else tr("All formatting will be removed from this note."),
+                              ok=tr("Remove Formatting"), danger=True, default_ok=False)
 
     def make_plain(self, confirm: bool = True) -> bool:
         if not self.editor.rich or not self.editor.isEnabled() or not self._writable():
@@ -2520,7 +2571,7 @@ class MainWindow(QMainWindow):
         item = self.tree.currentItem()
         if item is None or not self._writable():
             return False
-        with self.tree_change("Change Icon" if icon is not None else "Change Colour"):
+        with self.tree_change(tr("Change Icon") if icon is not None else tr("Change Colour")):
             item.set_look(icon, color)
         self.tree.viewport().update()
         return True
@@ -2529,7 +2580,7 @@ class MainWindow(QMainWindow):
         item = self.tree.currentItem()
         if item is None:
             return
-        color = self._pick_color(QColor(item.color or "#1f5fbf"), "Note Colour")
+        color = self._pick_color(QColor(item.color or "#1f5fbf"), tr("Note Colour"))
         if color.isValid():
             self.set_note_look(color=color.name())
 
@@ -2553,12 +2604,12 @@ class MainWindow(QMainWindow):
 
     def _ask_new_password(self) -> Optional[str]:
         dlg = QDialog(self)
-        dlg.setWindowTitle("Set Password")
+        dlg.setWindowTitle(tr("Set Password"))
         first, second = QLineEdit(), QLineEdit()
         for box in (first, second):
             box.setEchoMode(QLineEdit.Password)
-        note = QLabel("The file will be encrypted and saved as a Twigpad notes file (.twig).\n"
-                      "If you forget the password, the notes can't be recovered.")
+        note = QLabel(tr("The file will be encrypted and saved as a Twigpad notes file (.twig).\n"
+                      "If you forget the password, the notes can't be recovered."))
         note.setWordWrap(True)
         error = QLabel()
         error.setStyleSheet("color: #c0392b")
@@ -2573,9 +2624,9 @@ class MainWindow(QMainWindow):
 
         def check():
             if not first.text():
-                error.setText("Type a password.")
+                error.setText(tr("Type a password."))
             elif first.text() != second.text():
-                error.setText("The two passwords are different.")
+                error.setText(tr("The two passwords are different."))
             else:
                 dlg.accept()
         buttons.accepted.connect(check)
@@ -2595,8 +2646,8 @@ class MainWindow(QMainWindow):
 
     def set_password(self, password: Optional[str] = None) -> bool:
         if not twig.encryption_available():
-            popups.warning(self, "Password protection is not available",
-                           f"It needs {twig.MISSING_CRYPTO}. Install it, then restart {APP_NAME}.")
+            popups.warning(self, tr("Password protection is not available"),
+                           tr("It needs {package}. Install it, then restart {app}.").format(package=tr(twig.MISSING_CRYPTO), app=APP_NAME))
             return False
         if not self._writable():
             return False
@@ -2609,7 +2660,7 @@ class MainWindow(QMainWindow):
         self.setWindowModified(True)
         self._update_crypto_label()
         self._update_node_actions()
-        self.statusBar().showMessage("Password set. The file is encrypted from the next save.", 8000)
+        self.statusBar().showMessage(tr("Password set. The file is encrypted from the next save."), 8000)
         return True
 
     def remove_password(self) -> None:
@@ -2619,7 +2670,7 @@ class MainWindow(QMainWindow):
         self.setWindowModified(True)
         self._update_crypto_label()
         self._update_node_actions()
-        self.statusBar().showMessage("Password removed. The next save is not encrypted.", 8000)
+        self.statusBar().showMessage(tr("Password removed. The next save is not encrypted."), 8000)
 
     def _update_crypto_label(self) -> None:
         self.crypto_label.setVisible(self.crypto is not None)
@@ -2639,7 +2690,7 @@ class MainWindow(QMainWindow):
         self.editor.selectAll()
         self.editor.copy()
         self.editor.setTextCursor(keep)
-        self.statusBar().showMessage("Copied the whole article.", 3000)
+        self.statusBar().showMessage(tr("Copied the whole article."), 3000)
 
     def cut_article(self) -> None:
         """Cut the selection, or the whole article when nothing is selected."""
@@ -2650,9 +2701,9 @@ class MainWindow(QMainWindow):
         self.editor.cut()
 
     def _confirm_clear_article(self) -> bool:
-        return popups.confirm(self, "Delete the whole article?",
-                              "All the text of this note will be deleted. You can bring it back with Undo.",
-                              ok="Delete", danger=True, kind=popups.WARNING, default_ok=False)
+        return popups.confirm(self, tr("Delete the whole article?"),
+                              tr("All the text of this note will be deleted. You can bring it back with Undo."),
+                              ok=tr("Delete"), danger=True, kind=popups.WARNING, default_ok=False)
 
     def delete_article_text(self) -> None:
         if not self.editor.isEnabled() or not self._writable():
@@ -2669,7 +2720,7 @@ class MainWindow(QMainWindow):
         if not self.editor.isEnabled() or not self._writable():
             return False
         if path is None:
-            path, _ = QFileDialog.getOpenFileName(self, "Text File into Article", self._last_dir(), TEXT_FILTERS)
+            path, _ = QFileDialog.getOpenFileName(self, tr("Text File into Article"), self._last_dir(), text_filters())
             if not path:
                 return False
         text = self._read_text(path)
@@ -2721,17 +2772,17 @@ class MainWindow(QMainWindow):
     def choose_pane_colors(self) -> None:
         from PyQt5.QtWidgets import QPushButton
         dlg = QDialog(self)
-        dlg.setWindowTitle("Colours")
+        dlg.setWindowTitle(tr("Colours"))
         form = QFormLayout(dlg)
-        labels = {"tree_bg": "Tree &background:", "tree_fg": "Tree &text:",
-                  "article_bg": "&Article background:", "article_fg": "Article te&xt:"}
+        labels = {"tree_bg": tr("Tree &background:"), "tree_fg": tr("Tree &text:"),
+                  "article_bg": tr("&Article background:"), "article_fg": tr("Article te&xt:")}
 
         def button_for(key):
             btn = QPushButton()
 
             def refresh():
                 value = self.pane_colors()[key]
-                btn.setText(value or "Default")
+                btn.setText(value or tr("Default"))
                 pm = QPixmap(14, 14)
                 pm.fill(QColor(value) if value else Qt.transparent)
                 btn.setIcon(QIcon(pm))
@@ -2780,8 +2831,8 @@ class MainWindow(QMainWindow):
                 self.act_portable.blockSignals(True)
                 self.act_portable.setChecked(False)
                 self.act_portable.blockSignals(False)
-                popups.error(self, "Can't keep settings next to the program",
-                             "The program's folder can't be written to.", details=str(exc))
+                popups.error(self, tr("Can't keep settings next to the program"),
+                             tr("The program's folder can't be written to."), details=str(exc))
                 return False
             new = QSettings(target, QSettings.IniFormat)
         else:
@@ -2797,7 +2848,7 @@ class MainWindow(QMainWindow):
             except OSError:
                 pass
         where = target if on else "your home folder"
-        self.statusBar().showMessage(f"Settings are now kept in {where}.", 8000)
+        self.statusBar().showMessage(tr("Settings are now kept in {where}.").format(where=where), 8000)
         return True
 
     # ================================================================ links
@@ -2812,7 +2863,7 @@ class MainWindow(QMainWindow):
     def follow_link(self, link: Optional[str] = None) -> bool:
         link = link or self.link_at_cursor()
         if not link:
-            self.statusBar().showMessage("There is no link at the cursor.", 4000)
+            self.statusBar().showMessage(tr("There is no link at the cursor."), 4000)
             return False
         kind, target = links.classify(link)
         if kind == links.NODE:
@@ -2821,7 +2872,7 @@ class MainWindow(QMainWindow):
                 target, lambda it: it.text(0),
                 lambda it: [it.child(i) for i in range(it.childCount())])
             if item is None:
-                self.statusBar().showMessage(f"No node found for [{link}].", 6000)
+                self.statusBar().showMessage(tr("No node found for [{link}].").format(link=link), 6000)
                 return False
             self.tree.setCurrentItem(item)
             self.tree.scrollToItem(item)
@@ -2834,7 +2885,7 @@ class MainWindow(QMainWindow):
                 base = os.path.dirname(os.path.abspath(self.path)) if self.path else os.getcwd()
                 path = os.path.join(base, path)
             if not os.path.exists(path):
-                self.statusBar().showMessage(f"File not found: {path}", 6000)
+                self.statusBar().showMessage(tr("File not found: {path}").format(path=path), 6000)
                 return False
             return self._open_url(QUrl.fromLocalFile(path))
         return self._open_url(QUrl(target, QUrl.TolerantMode))
@@ -2843,16 +2894,16 @@ class MainWindow(QMainWindow):
         """Hand a link to the desktop (browser, mail program, file manager)."""
         ok = QDesktopServices.openUrl(url)
         if not ok:
-            self.statusBar().showMessage(f"Could not open {url.toString()}", 6000)
+            self.statusBar().showMessage(tr("Could not open {url}").format(url=url.toString()), 6000)
         return ok
 
     def insert_file_link(self, folder: bool = False) -> None:
         if not self.editor.isEnabled() or not self._writable():
             return
         if folder:
-            path = QFileDialog.getExistingDirectory(self, "Link to Folder", self._last_dir())
+            path = QFileDialog.getExistingDirectory(self, tr("Link to Folder"), self._last_dir())
         else:
-            path, _ = QFileDialog.getOpenFileName(self, "Link to File", self._last_dir())
+            path, _ = QFileDialog.getOpenFileName(self, tr("Link to File"), self._last_dir())
         if path:
             self.editor.insertPlainText(f"[file://{path}]")
             self.editor.setFocus()
@@ -2943,9 +2994,9 @@ class MainWindow(QMainWindow):
         zoom = 0 if step == 0 else min(ZOOM_RANGE[1], max(ZOOM_RANGE[0], self.text_zoom(which) + step))
         self.settings.setValue(f"view/{which}_zoom", zoom)
         self.apply_text_sizes()
-        pane = "Tree" if which == "tree" else "Article"
         size = (self.tree if which == "tree" else self.editor).font().pointSizeF()
-        self.statusBar().showMessage(f"{pane} text size: {size:g} pt", 2000)
+        text = tr("Tree text size: {size:g} pt") if which == "tree" else tr("Article text size: {size:g} pt")
+        self.statusBar().showMessage(text.format(size=size), 2000)
 
     def set_tree_icon_size(self, px: int, remember: bool = True) -> None:
         if px not in self.act_tree_icon_sizes:
@@ -3011,8 +3062,8 @@ class MainWindow(QMainWindow):
         if self.path:
             name = os.path.basename(self.path)
         else:
-            name = self.source_name or "Untitled"
-        self.setWindowTitle(f"{name}[*] - {APP_NAME}")
+            name = self.source_name or tr("Untitled")
+        self.setWindowTitle(tr("{name}[*] - {APP_NAME}").format(name=name, APP_NAME=APP_NAME))
 
     def _set_document(self, doc: Document) -> None:
         self._editing_item = None
@@ -3044,12 +3095,12 @@ class MainWindow(QMainWindow):
         self._commit_editor()
         if not self.isWindowModified():
             return True
-        name = os.path.basename(self.path) if self.path else (self.source_name or "Untitled")
+        name = os.path.basename(self.path) if self.path else (self.source_name or tr("Untitled"))
         answer = popups.show(
-            self, popups.WARNING, f"Save changes to \"{name}\"?",
-            "If you don't save, your changes will be lost.",
-            (("discard", "Don't Save", popups.NORMAL), ("cancel", "Cancel", popups.CANCEL),
-             ("save", "Save", popups.PRIMARY)), "save")
+            self, popups.WARNING, tr("Save changes to \"{name}\"?").format(name=name),
+            tr("If you don't save, your changes will be lost."),
+            (("discard", tr("Don't Save"), popups.NORMAL), ("cancel", tr("Cancel"), popups.CANCEL),
+             ("save", tr("Save"), popups.PRIMARY)), "save")
         if answer == "save":
             return self.save()
         return answer == "discard"
@@ -3075,7 +3126,7 @@ class MainWindow(QMainWindow):
         if not self.maybe_save():
             return False
         if path is None:
-            path, _ = QFileDialog.getOpenFileName(self, "Open", self._last_dir(), FILE_FILTERS)
+            path, _ = QFileDialog.getOpenFileName(self, tr("Open"), self._last_dir(), file_filters())
             if not path:
                 return False
         return self.load_path(path)
@@ -3101,25 +3152,25 @@ class MainWindow(QMainWindow):
             doc.path = path
             return doc
         except (OSError, hjt.HjtFormatError, twig.TwigFormatError, zipfile.BadZipFile) as exc:
-            popups.error(self, f"Could not open \"{name}\"",
-                         "The file could not be read. It may be damaged, or not a notes file.",
+            popups.error(self, tr("Could not open \"{name}\"").format(name=name),
+                         tr("The file could not be read. It may be damaged, or not a notes file."),
                          details=str(exc))
             return None
 
     def _ask_password(self, name: str, retry: bool) -> Optional[str]:
         """Ask for the password of a protected file (None = cancelled)."""
         if retry:
-            return popups.get_text(self, "Wrong password", f"Try the password for \"{name}\" again.",
-                                   password=True, ok="Unlock", kind=popups.ERROR)
-        return popups.get_text(self, "This file is password protected",
-                               f"Enter the password for \"{name}\".", password=True, ok="Unlock",
-                               placeholder="Password")
+            return popups.get_text(self, tr("Wrong password"), tr("Try the password for \"{name}\" again.").format(name=name),
+                                   password=True, ok=tr("Unlock"), kind=popups.ERROR)
+        return popups.get_text(self, tr("This file is password protected"),
+                               tr("Enter the password for \"{name}\".").format(name=name), password=True, ok=tr("Unlock"),
+                               placeholder=tr("Password"))
 
     def _show_repairs(self, doc: Document) -> None:
         if not doc.warnings:
             return
-        popups.warning(self, "Some parts of the file needed repair",
-                       "The file was opened. Check the details, then save to keep the repaired copy.",
+        popups.warning(self, tr("Some parts of the file needed repair"),
+                       tr("The file was opened. Check the details, then save to keep the repaired copy."),
                        details="\n".join(doc.warnings))
 
     def load_path(self, path: str) -> bool:
@@ -3153,7 +3204,7 @@ class MainWindow(QMainWindow):
             self.source_name = base
             self.setWindowModified(True)
             self.statusBar().showMessage(
-                f"Imported {os.path.basename(path)}. Use Save to keep it as a new file.", 10000)
+                tr("Imported {name}. Use Save to keep it as a new file.").format(name=os.path.basename(path)), 10000)
         else:
             self.path = path
             self.source_name = ""
@@ -3161,7 +3212,8 @@ class MainWindow(QMainWindow):
             self._watch(path)
             locked = not os.access(path, os.W_OK)
             self.statusBar().showMessage(
-                f"Opened {path}" + (" (read only: the file can't be changed)" if locked else ""), 5000)
+                tr("Opened {path}").format(path=path)
+                + ((" " + tr("(read only: the file can't be changed)")) if locked else ""), 5000)
         self.set_read_only(locked)
         self._update_title()
         self._show_repairs(doc)
@@ -3171,23 +3223,23 @@ class MainWindow(QMainWindow):
         if not self._writable():
             return False
         if path is None:
-            path, _ = QFileDialog.getOpenFileName(self, "Import Tree File or Backup",
-                                                  self._last_dir(), FILE_FILTERS)
+            path, _ = QFileDialog.getOpenFileName(self, tr("Import Tree File or Backup"),
+                                                  self._last_dir(), file_filters())
             if not path:
                 return False
         doc = self._read_tree_file(path)
         if doc is None:
             return False
         if not doc.top_nodes:
-            self.statusBar().showMessage("That file has no nodes.", 4000)
+            self.statusBar().showMessage(tr("That file has no nodes."), 4000)
             return False
         self._commit_editor()
         for name, data in doc.images.items():
             self.editor.images.setdefault(name, data)
-        with self.tree_change("Import"):
+        with self.tree_change(tr("Import")):
             self._insert_under_current(doc.top_nodes)
         n = doc.node_count()
-        self.statusBar().showMessage(f"Imported {n} node{'s' if n != 1 else ''} from {os.path.basename(path)}.", 6000)
+        self.statusBar().showMessage(ntr("Imported {n} node from {name}.", "Imported {n} nodes from {name}.", n).format(n=n, name=os.path.basename(path)), 6000)
         self._show_repairs(doc)
         return True
 
@@ -3196,7 +3248,7 @@ class MainWindow(QMainWindow):
             with open(path, "rb") as fh:
                 text, _enc = hjt.decode_bytes(fh.read())
         except OSError as exc:
-            popups.error(self, "Could not read the file", path, details=str(exc))
+            popups.error(self, tr("Could not read the file"), path, details=str(exc))
             return None
         return text.replace("\r\n", "\n").replace("\r", "\n")
 
@@ -3208,7 +3260,7 @@ class MainWindow(QMainWindow):
         if not self._writable():
             return False
         if paths is None:
-            paths, _ = QFileDialog.getOpenFileNames(self, "Import Text Files", self._last_dir(), TEXT_FILTERS)
+            paths, _ = QFileDialog.getOpenFileNames(self, tr("Import Text Files"), self._last_dir(), text_filters())
             if not paths:
                 return False
         nodes = []
@@ -3219,10 +3271,10 @@ class MainWindow(QMainWindow):
         if not nodes:
             return False
         self._commit_editor()
-        with self.tree_change("Import"):
+        with self.tree_change(tr("Import")):
             self._insert_under_current(nodes)
         n = len(nodes)
-        self.statusBar().showMessage(f"Imported {n} text file{'s' if n != 1 else ''}.", 5000)
+        self.statusBar().showMessage(ntr("Imported {n} text file.", "Imported {n} text files.", n).format(n=n), 5000)
         return True
 
     def import_csv_file(self, path: Optional[str] = None) -> bool:
@@ -3230,8 +3282,8 @@ class MainWindow(QMainWindow):
         if not self._writable():
             return False
         if path is None:
-            path, _ = QFileDialog.getOpenFileName(self, "Import CSV File", self._last_dir(),
-                                                  "CSV files (*.csv *.CSV *.tsv *.txt);;All files (*)")
+            path, _ = QFileDialog.getOpenFileName(self, tr("Import CSV File"), self._last_dir(),
+                                                  _filters((N_("CSV files"), "*.csv *.CSV *.tsv *.txt"), ALL_FILES))
             if not path:
                 return False
         text = self._read_text(path)
@@ -3239,13 +3291,13 @@ class MainWindow(QMainWindow):
             return False
         nodes = importers.csv_to_nodes(text)
         if not nodes:
-            self.statusBar().showMessage("That file has no rows.", 4000)
+            self.statusBar().showMessage(tr("That file has no rows."), 4000)
             return False
         self._commit_editor()
-        with self.tree_change("Import"):
+        with self.tree_change(tr("Import")):
             self._insert_under_current(nodes)
         n = len(nodes)
-        self.statusBar().showMessage(f"Imported {n} row{'s' if n != 1 else ''} from {os.path.basename(path)}.", 5000)
+        self.statusBar().showMessage(ntr("Imported {n} row from {name}.", "Imported {n} rows from {name}.", n).format(n=n, name=os.path.basename(path)), 5000)
         return True
 
     def insert_text_file(self, path: Optional[str] = None) -> bool:
@@ -3253,7 +3305,7 @@ class MainWindow(QMainWindow):
         if not self.editor.isEnabled() or not self._writable():
             return False
         if path is None:
-            path, _ = QFileDialog.getOpenFileName(self, "Insert Text from File", self._last_dir(), TEXT_FILTERS)
+            path, _ = QFileDialog.getOpenFileName(self, tr("Insert Text from File"), self._last_dir(), text_filters())
             if not path:
                 return False
         text = self._read_text(path)
@@ -3306,10 +3358,10 @@ class MainWindow(QMainWindow):
         return [node]
 
     _EXPORT_KINDS = {
-        "text": ("Export as Text", ".txt", "Text files (*.txt);;All files (*)"),
-        "html": ("Export as HTML", ".html", "Web pages (*.html *.htm);;All files (*)"),
-        "hjt": ("Export as Tree File", ".hjt", "Tree notes (*.hjt)"),
-        "twig": ("Export as Twigpad File", ".twig", "Twigpad notes (*.twig)"),
+        "text": (N_("Export as Text"), ".txt", ((N_("Text files"), "*.txt"), ALL_FILES)),
+        "html": (N_("Export as HTML"), ".html", ((N_("Web pages"), "*.html *.htm"), ALL_FILES)),
+        "hjt": (N_("Export as Tree File"), ".hjt", ((N_("Tree notes"), "*.hjt"),)),
+        "twig": (N_("Export as Twigpad File"), ".twig", ((N_("Twigpad notes"), "*.twig"),)),
     }
 
     def export_text(self, scope: str, path: Optional[str] = None) -> bool:
@@ -3322,18 +3374,18 @@ class MainWindow(QMainWindow):
         caption, ext, filters = self._EXPORT_KINDS[kind]
         if path is None:
             if scope == "all":
-                base = os.path.splitext(os.path.basename(self.path or self.source_name or "Untitled"))[0]
+                base = os.path.splitext(os.path.basename(self.path or self.source_name or tr("Untitled")))[0]
             else:
                 base = nodes[0].title
             safe = "".join(c if c not in '/\\:*?"<>|' else "_" for c in base).strip() or "export"
-            path, _ = QFileDialog.getSaveFileName(self, caption, os.path.join(self._last_dir(), safe + ext),
-                                                  filters)
+            path, _ = QFileDialog.getSaveFileName(self, tr(caption), os.path.join(self._last_dir(), safe + ext),
+                                                  _filters(*filters))
             if not path:
                 return False
             if not os.path.splitext(path)[1]:
                 path += ext
         if kind in ("hjt", "twig") and self.path and os.path.abspath(path) == os.path.abspath(self.path):
-            popups.warning(self, "Choose a different name", "That is the file you have open.")
+            popups.warning(self, tr("Choose a different name"), tr("That is the file you have open."))
             return False
         try:
             if kind in ("hjt", "twig"):
@@ -3361,9 +3413,9 @@ class MainWindow(QMainWindow):
                 with open(path, "w", encoding="utf-8", newline="\n") as fh:
                     fh.write(content)
         except OSError as exc:
-            popups.error(self, "Could not export", f"\"{path}\" could not be written.", details=str(exc))
+            popups.error(self, tr("Could not export"), tr("\"{path}\" could not be written.").format(path=path), details=str(exc))
             return False
-        self.statusBar().showMessage(f"Exported to {path}", 5000)
+        self.statusBar().showMessage(tr("Exported to {path}").format(path=path), 5000)
         return True
 
     def print_nodes(self, scope: str = "branch") -> None:
@@ -3382,7 +3434,7 @@ class MainWindow(QMainWindow):
         document.setHtml(export.outline_html(nodes))
         printer = QPrinter(QPrinter.HighResolution)
         preview = QPrintPreviewDialog(printer, self)
-        preview.setWindowTitle("Print Preview")
+        preview.setWindowTitle(tr("Print Preview"))
         preview.paintRequested.connect(document.print_)
         preview.resize(900, 700)
         preview.exec_()
@@ -3410,22 +3462,21 @@ class MainWindow(QMainWindow):
         ext = ".twig" if twig_format else ".hjt"
         start = self.path or os.path.join(self._last_dir(), self.source_name or "Untitled.hjt")
         start = os.path.splitext(start)[0] + ext
-        filters = f"{TWIG_FILTER};;{HJT_FILTER}" if twig_format else f"{HJT_FILTER};;{TWIG_FILTER}"
-        path, chosen = QFileDialog.getSaveFileName(self, "Save As", start, filters)
+        filters = f"{twig_filter()};;{hjt_filter()}" if twig_format else f"{hjt_filter()};;{twig_filter()}"
+        path, chosen = QFileDialog.getSaveFileName(self, tr("Save As"), start, filters)
         if not path:
             return False
         if not os.path.splitext(path)[1]:
-            path += ".twig" if chosen == TWIG_FILTER else ".hjt"
+            path += ".twig" if chosen == twig_filter() else ".hjt"
         return self._write(path)
 
     def _ask_save_format(self, name: str, reasons: List[str]) -> Optional[str]:
         """'twig', 'hjt' (drop what .hjt can't hold) or None (cancel)."""
         answer = popups.show(
-            self, popups.QUESTION, "Keep the formatting?",
-            f"\"{name}\" uses {_and_list(reasons)}, which a .hjt file can't store. Save it as a "
-            f"{APP_NAME} notes file (.twig) to keep everything, or as .hjt with plain text only.",
-            (("hjt", "Save as Plain .hjt", popups.NORMAL), ("cancel", "Cancel", popups.CANCEL),
-             ("twig", "Save as .twig...", popups.PRIMARY)), "twig")
+            self, popups.QUESTION, tr("Keep the formatting?"),
+            tr("“{name}” uses {features}, which a .hjt file can't store. Save it as a {app} notes file (.twig) to keep everything, or as .hjt with plain text only.").format(name=name, features=_and_list(reasons), app=APP_NAME),
+            (("hjt", tr("Save as Plain .hjt"), popups.NORMAL), ("cancel", tr("Cancel"), popups.CANCEL),
+             ("twig", tr("Save as .twig..."), popups.PRIMARY)), "twig")
         return answer if answer in ("twig", "hjt") else None
 
     @staticmethod
@@ -3433,11 +3484,11 @@ class MainWindow(QMainWindow):
         nodes = [n for n, _ in doc.walk()]
         reasons = []
         if any(n.html for n in nodes):
-            reasons.append("formatted text")
+            reasons.append(tr("formatted text"))
         if any(n.icon or n.color for n in nodes):
-            reasons.append("note icons or colours")
+            reasons.append(tr("note icons or colours"))
         if doc.crypto is not None:
-            reasons.append("a password")
+            reasons.append(tr("a password"))
         return reasons
 
     def _make_backup(self, path: str) -> None:
@@ -3456,14 +3507,13 @@ class MainWindow(QMainWindow):
                 bak = path + ".bak"
                 if os.path.exists(bak):
                     self.statusBar().showMessage(
-                        f"Note: the older backup copy {os.path.basename(bak)} is not password "
-                        "protected. Delete it if it should stay private.", 20000)
+                        tr("Note: the older backup copy {name} is not password protected. Delete it if it should stay private.").format(name=os.path.basename(bak)), 20000)
                 return
         try:
             shutil.copy2(path, path + ".bak")
             self._backed_up_path = path
         except OSError as exc:
-            self.statusBar().showMessage(f"Could not write backup copy: {exc}", 8000)
+            self.statusBar().showMessage(tr("Could not write backup copy: {exc}").format(exc=exc), 8000)
 
     def _write(self, path: str, quiet: bool = False) -> bool:
         self._commit_editor()
@@ -3472,14 +3522,14 @@ class MainWindow(QMainWindow):
             if quiet or not self._confirm_overwrite(os.path.basename(path)):
                 if quiet:
                     self.statusBar().showMessage(
-                        "Auto-save skipped: the file was changed by another program.", 10000)
+                        tr("Auto-save skipped: the file was changed by another program."), 10000)
                 return False
         doc = self._current_document()
         as_twig = path.lower().endswith(".twig")
         if not as_twig and doc.needs_twig() and self._plain_ok_path != path:
             if quiet:
                 self.statusBar().showMessage(
-                    "Auto-save skipped: choose how to save the formatting first (File > Save).", 10000)
+                    tr("Auto-save skipped: choose how to save the formatting first (File > Save)."), 10000)
                 return False
             choice = self._ask_save_format(os.path.basename(path), self._twig_reasons(doc))
             if choice is None:
@@ -3498,10 +3548,10 @@ class MainWindow(QMainWindow):
                 hjt.save(doc, path, self.encoding)
         except (OSError, ValueError) as exc:
             if quiet:
-                self.statusBar().showMessage(f"Auto-save failed: {exc}", 10000)
+                self.statusBar().showMessage(tr("Auto-save failed: {exc}").format(exc=exc), 10000)
             else:
-                popups.error(self, f"Could not save \"{os.path.basename(path)}\"",
-                             "Your changes are still open here. Try saving somewhere else with Save As.",
+                popups.error(self, tr("Could not save \"{name}\"").format(name=os.path.basename(path)),
+                             tr("Your changes are still open here. Try saving somewhere else with Save As."),
                              details=f"{path}\n\n{exc}")
             return False
         self.path = path
@@ -3514,7 +3564,7 @@ class MainWindow(QMainWindow):
         self.setWindowModified(False)
         self._update_title()
         when = QLocale().toString(QDateTime.currentDateTime().time(), QLocale.ShortFormat)
-        self.statusBar().showMessage(f"{'Auto-saved' if quiet else 'Saved'} {path} at {when}", 5000)
+        self.statusBar().showMessage((tr("Auto-saved {path} at {when}") if quiet else tr("Saved {path} at {when}")).format(path=path, when=when), 5000)
         return True
 
     def set_autosave(self, on: bool) -> None:
@@ -3532,6 +3582,51 @@ class MainWindow(QMainWindow):
     # ================================================================ misc
 
     # ======================================================= theme
+
+    def set_language(self, choice: str, ask: bool = True) -> Optional[str]:
+        """Use another language for menus and windows. It takes effect when
+        Twigpad starts again, so this offers to restart now. Returns the
+        answer ("restart" or "later"), or None when nothing changes."""
+        if choice != i18n.AUTO and choice not in i18n.LANGUAGES:
+            return None
+        self.settings.setValue("view/language", choice)
+        self.settings.sync()
+        for widget in QApplication.topLevelWidgets():
+            if isinstance(widget, MainWindow):
+                widget.act_languages[choice].setChecked(True)
+        code = i18n.resolve(choice)
+        if code == i18n.current or not ask:
+            return None
+        # Asked in the new language: whoever chose it can read that one.
+        t = lambda text: i18n.tr_in(code, text)   # noqa: E731
+        answer = popups.show(
+            self, popups.INFO, t(N_("Restart Twigpad to change the language?")),
+            t(N_("Menus and windows will be in {language} after Twigpad restarts. "
+                 "You will be asked about unsaved changes first.")).format(language=i18n.LANGUAGES[code]),
+            (("later", t(N_("Later")), popups.CANCEL), ("restart", t(N_("Restart Now")), popups.PRIMARY)), "restart")
+        if answer == "restart":
+            self.restart()
+        return answer
+
+    def restart(self) -> bool:
+        """Close every window (asking about unsaved changes) and start again,
+        reopening the file that was open here."""
+        reopen = self.path if self.path and os.path.exists(self.path) else None
+        for widget in list(QApplication.topLevelWidgets()):
+            if isinstance(widget, MainWindow) and widget.isVisible() and not widget.close():
+                return False
+        program, args, env = desktop.restart_command()
+        proc = QProcess()
+        proc.setProgram(program)
+        proc.setArguments(args + ([reopen] if reopen else []))
+        if env:
+            penv = QProcessEnvironment.systemEnvironment()
+            for key, value in env.items():
+                penv.insert(key, value)
+            proc.setProcessEnvironment(penv)
+        proc.startDetached()
+        QApplication.quit()
+        return True
 
     def set_theme(self, name: str) -> None:
         """Light, dark, automatic (follows the desktop) or the desktop's own style."""
@@ -3600,7 +3695,7 @@ class MainWindow(QMainWindow):
     def open_web(self, url: str) -> bool:
         ok = QDesktopServices.openUrl(QUrl(url))
         if not ok:
-            self.statusBar().showMessage(f"Couldn't open {url}", 8000)
+            self.statusBar().showMessage(tr("Couldn't open {url}").format(url=url), 8000)
         return ok
 
     def _link_label(self, html: str, wrap: bool = True) -> QLabel:
@@ -3618,7 +3713,7 @@ class MainWindow(QMainWindow):
         from PyQt5.QtCore import QT_VERSION_STR
         from PyQt5.QtWidgets import QHBoxLayout, QPushButton
         dlg = QDialog(self)
-        dlg.setWindowTitle(f"About {APP_NAME}")
+        dlg.setWindowTitle(tr("About {APP_NAME}").format(APP_NAME=APP_NAME))
         lay = QVBoxLayout(dlg)
         lay.setContentsMargins(24, 22, 24, 16)
         lay.setSpacing(12)
@@ -3627,30 +3722,30 @@ class MainWindow(QMainWindow):
         logo.setPixmap(icons.app_icon().pixmap(72, 72))
         head.addWidget(logo, 0, Qt.AlignTop)
         sub = theme.mix(self.palette().color(QPalette.Window), self.palette().color(QPalette.WindowText), 0.65)
-        title = QLabel(f"<div style='font-size:20pt; font-weight:600'>{APP_NAME}</div>"
-                       f"<div style='color:{sub.name()}'>Version {__version__}</div>"
-                       "<div style='margin-top:6px'>Organize notes, ideas and knowledge in a tree.</div>")
+        title = QLabel("<div style='font-size:20pt; font-weight:600'>{}</div><div style='color:{}'>{}</div><div style='margin-top:6px'>{}</div>".format(
+            APP_NAME, sub.name(), tr("Version {version}").format(version=__version__),
+            tr("Organize notes, ideas and knowledge in a tree.")))
         title.setWordWrap(False)
         head.addWidget(title, 1)
         lay.addLayout(head)
         lay.addWidget(self._link_label(
-            f"Made by <a href='{developer.DEVELOPER_URL}'>{developer.DEVELOPER}</a> at "
-            f"<a href='{developer.WEBSITE}'>{developer.COMPANY}</a>."))
+            tr("Made by {developer} at {company}.").format(
+                developer=f"<a href='{developer.DEVELOPER_URL}'>{developer.DEVELOPER}</a>",
+                company=f"<a href='{developer.WEBSITE}'>{developer.COMPANY}</a>")))
         lay.addWidget(self._link_label(
-            f"{APP_NAME} is free software (GPL 3.0 or later). If it is useful to you, please "
-            "consider supporting its development, and have a look at my other apps."))
+            tr("{app} is free software (GPL 3.0 or later). If it is useful to you, please consider supporting its development, and have a look at my other apps.").format(app=APP_NAME)))
         lay.addWidget(self._link_label(
-            f"Found a problem? <a href='{html.escape(self.bug_report_url())}'>Report a bug on GitHub</a>."))
-        small = QLabel(f"<span style='color:{sub.name()}'>Qt {QT_VERSION_STR} · "
-                       f"Python {platform.python_version()}</span>")
+            tr("Found a problem? {link}.").format(
+                link=f"<a href='{html.escape(self.bug_report_url())}'>{tr('Report a bug on GitHub')}</a>")))
+        small = QLabel(f"<span style='color:{sub.name()}'>Qt {QT_VERSION_STR} · Python {platform.python_version()}</span>")
         lay.addWidget(small)
         row = QHBoxLayout()
-        donate = QPushButton(treestyle.note_icon("heart"), " Support the Developer")
+        donate = QPushButton(treestyle.note_icon("heart"), " " + tr("Support the Developer"))
         donate.setObjectName("accent")
         donate.clicked.connect(lambda: self.open_web(developer.DONATE_URL))
-        more = QPushButton("More Apps")
+        more = QPushButton(tr("More Apps"))
         more.clicked.connect(self.show_more_apps)
-        close = QPushButton("Close")
+        close = QPushButton(tr("Close"))
         close.setDefault(True)
         close.clicked.connect(dlg.accept)
         row.addWidget(donate)
@@ -3667,7 +3762,7 @@ class MainWindow(QMainWindow):
     def report_bug(self) -> None:
         """Open a new GitHub issue with the versions filled in; the user writes the rest."""
         self.open_web(self.bug_report_url())
-        self.statusBar().showMessage("Opened a new bug report in your web browser", 5000)
+        self.statusBar().showMessage(tr("Opened a new bug report in your web browser"), 5000)
 
     def _system_info(self) -> dict:
         from PyQt5.QtCore import PYQT_VERSION_STR, qVersion
@@ -3679,7 +3774,7 @@ class MainWindow(QMainWindow):
     def request_feature(self) -> None:
         """Open a new GitHub issue for an idea."""
         self.open_web(self.feature_request_url())
-        self.statusBar().showMessage("Opened a new feature request in your web browser", 5000)
+        self.statusBar().showMessage(tr("Opened a new feature request in your web browser"), 5000)
 
     def shortcuts_dialog(self):
         from .shortcuts import ShortcutsDialog
@@ -3694,12 +3789,12 @@ class MainWindow(QMainWindow):
     def _more_apps_dialog(self) -> QDialog:
         from PyQt5.QtWidgets import QFrame, QHBoxLayout, QPushButton
         dlg = QDialog(self)
-        dlg.setWindowTitle(f"More Apps by {developer.COMPANY}")
+        dlg.setWindowTitle(tr("More Apps by {COMPANY}").format(COMPANY=developer.COMPANY))
         lay = QVBoxLayout(dlg)
         lay.setContentsMargins(20, 18, 20, 14)
         lay.setSpacing(8)
-        lay.addWidget(QLabel(f"<div style='font-size:13pt; font-weight:600'>More apps for Linux "
-                             f"from the developer of {APP_NAME}</div>"))
+        lay.addWidget(QLabel("<div style='font-size:13pt; font-weight:600'>{}</div>".format(
+            tr("More apps for Linux from the developer of {app}").format(app=APP_NAME))))
         pal = self.palette()
         sub = theme.mix(pal.color(QPalette.Window), pal.color(QPalette.WindowText), 0.65).name()
         line = theme.mix(pal.color(QPalette.Window), pal.color(QPalette.WindowText), 0.15).name()
@@ -3715,17 +3810,17 @@ class MainWindow(QMainWindow):
             logo.setPixmap(icons.other_app_icon(app.icon).pixmap(44, 44))
             row.addWidget(logo, 0, Qt.AlignVCenter)
             row.addWidget(self._link_label(
-                f"<b>{app.name}</b><br><span style='color:{sub}'>{app.summary}</span>", wrap=False), 1)
-            btn = QPushButton("Learn More")
+                f"<b>{app.name}</b><br><span style='color:{sub}'>{tr(app.summary)}</span>", wrap=False), 1)
+            btn = QPushButton(tr("Learn More"))
             btn.clicked.connect(lambda _c=False, url=app.url: self.open_web(url))
             row.addWidget(btn, 0, Qt.AlignVCenter)
             lay.addWidget(card)
         bottom = QHBoxLayout()
-        bottom.addWidget(self._link_label(f"<a href='{developer.ALL_APPS_URL}'>See all apps</a> · "
-                                          f"<a href='{developer.DONATE_URL}'>Support the developer</a>",
+        bottom.addWidget(self._link_label(f"<a href='{developer.ALL_APPS_URL}'>{tr('See all apps')}</a> · "
+                                          f"<a href='{developer.DONATE_URL}'>{tr('Support the developer')}</a>",
                                           wrap=False))
         bottom.addStretch(1)
-        close = QPushButton("Close")
+        close = QPushButton(tr("Close"))
         close.setDefault(True)
         close.clicked.connect(dlg.accept)
         bottom.addWidget(close)

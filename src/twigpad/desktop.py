@@ -16,9 +16,10 @@ import shlex
 import shutil
 import subprocess
 import sys
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 from . import APP_ID, APP_NAME, DESKTOP_ID
+from .i18n import tr
 
 MIME_TYPES = ("application/x-hjt", "application/x-twigpad")
 RESOURCES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources")
@@ -56,6 +57,19 @@ def launch_command() -> str:
     if os.path.basename(package_parent) not in ("site-packages", "dist-packages"):
         cmd = f"env PYTHONPATH={_quote(package_parent)} {cmd}"   # running from the source folder
     return cmd
+
+
+def restart_command() -> Tuple[str, List[str], Dict[str, str]]:
+    """How to start this Twigpad again: program, arguments and extra
+    environment variables."""
+    appimage = os.environ.get("APPIMAGE")
+    if appimage:
+        return appimage, [], {}
+    package_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = {}
+    if os.path.basename(package_parent) not in ("site-packages", "dist-packages"):
+        env["PYTHONPATH"] = package_parent
+    return sys.executable, ["-m", APP_ID], env
 
 
 def desktop_entry(exec_cmd: str) -> str:
@@ -159,8 +173,8 @@ def _write(path: str, data: bytes) -> None:
 def make_default(run: Runner = subprocess.run) -> None:
     """Register the file types and make Twigpad open them. Raises OSError."""
     if in_flatpak():
-        raise OSError("In the Flatpak version, use your file manager: right-click a .hjt file, "
-                      f"choose Open With, then {APP_NAME} and Always.")
+        raise OSError(tr("In the Flatpak version, use your file manager: right-click a .hjt file, "
+                         "choose Open With, then {app} and Always.").format(app=APP_NAME))
     with open(os.path.join(RESOURCES, "twigpad-mime.xml"), "rb") as fh:
         _write(os.path.join(data_home(), "mime", "packages", DESKTOP_ID + ".xml"), fh.read())
     _run(run, "update-mime-database", os.path.join(data_home(), "mime"))

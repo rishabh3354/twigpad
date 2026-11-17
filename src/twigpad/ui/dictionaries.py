@@ -13,8 +13,9 @@ from PyQt5.QtWidgets import (
 
 from .. import spell
 from . import popups
+from ..i18n import tr
 
-INSTALLED, NOT_INSTALLED = "Installed", "Not installed"
+STATE = Qt.UserRole + 1   # True on rows of installed dictionaries
 
 
 class DownloadThread(QThread):
@@ -41,29 +42,29 @@ class DictionaryDialog(QDialog):
         super().__init__(window)
         self.win = window
         self.thread: Optional[DownloadThread] = None
-        self.setWindowTitle("Spelling Languages")
+        self.setWindowTitle(tr("Spelling Languages"))
         lay = QVBoxLayout(self)
         lay.setContentsMargins(20, 18, 20, 14)
         lay.setSpacing(10)
-        head = QLabel("<b>Download a dictionary to check spelling in another language.</b><br>"
-                      "Dictionaries are free and come from the LibreOffice and Mozilla projects.")
+        head = QLabel(tr("<b>Download a dictionary to check spelling in another language.</b><br>"
+                      "Dictionaries are free and come from the LibreOffice and Mozilla projects."))
         head.setWordWrap(True)
         lay.addWidget(head)
         if not spell.library_available():
-            warn = QLabel("Spell checking also needs the Hunspell library. Install the "
+            warn = QLabel(tr("Spell checking also needs the Hunspell library. Install the "
                           "<b>hunspell</b> package (for example <i>sudo apt install libhunspell-1.7-0</i>), "
-                          "then restart Twigpad.")
+                          "then restart Twigpad."))
             warn.setWordWrap(True)
             warn.setObjectName("hint")
             lay.addWidget(warn)
         self.filter = QLineEdit()
-        self.filter.setPlaceholderText("Search languages")
+        self.filter.setPlaceholderText(tr("Search languages"))
         self.filter.setClearButtonEnabled(True)
         self.filter.textChanged.connect(self._apply_filter)
         lay.addWidget(self.filter)
         self.table = QTreeWidget()
         self.table.setObjectName("languages")
-        self.table.setHeaderLabels(["Language", "Code", "Status"])
+        self.table.setHeaderLabels([tr("Language"), tr("Code"), tr("Status")])
         self.table.setRootIsDecorated(False)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.itemSelectionChanged.connect(self._update_buttons)
@@ -83,13 +84,13 @@ class DictionaryDialog(QDialog):
         lay.addWidget(self.bar)
         lay.addWidget(self.status)
         row = QHBoxLayout()
-        self.remove_btn = QPushButton("Remove")
+        self.remove_btn = QPushButton(tr("Remove"))
         self.remove_btn.clicked.connect(self.remove)
         row.addWidget(self.remove_btn)
         row.addStretch(1)
-        self.close_btn = QPushButton("Close")
+        self.close_btn = QPushButton(tr("Close"))
         self.close_btn.clicked.connect(self.reject)
-        self.download_btn = QPushButton("Download")
+        self.download_btn = QPushButton(tr("Download"))
         self.download_btn.setObjectName("accent")
         self.download_btn.setDefault(True)
         self.download_btn.clicked.connect(self.download)
@@ -105,14 +106,15 @@ class DictionaryDialog(QDialog):
         current = self.selected()
         self.table.clear()
         known = {lang.code for lang in spell.DOWNLOADS}
-        rows = [(lang.name, lang.code, lang) for lang in spell.DOWNLOADS]
+        rows = [(spell.language_name(lang.code), lang.code, lang) for lang in spell.DOWNLOADS]
         rows += [(spell.language_name(code), code, None) for code in installed if code not in known]
         for name, code, lang in sorted(rows, key=lambda r: (r[1] not in installed, r[0].casefold())):
-            row = QTreeWidgetItem([name, code, INSTALLED if code in installed else NOT_INSTALLED])
+            row = QTreeWidgetItem([name, code, tr("Installed") if code in installed else tr("Not installed")])
             row.setData(0, Qt.UserRole, code)
             row.setData(1, Qt.UserRole, lang)
+            row.setData(2, STATE, code in installed)
             if code == self.win.settings.value("spell/language", "", type=str):
-                row.setText(2, INSTALLED + " (in use)")
+                row.setText(2, tr("Installed (in use)"))
             self.table.addTopLevelItem(row)
             if current and code == current:
                 self.table.setCurrentItem(row)
@@ -140,8 +142,8 @@ class DictionaryDialog(QDialog):
         row = self.table.currentItem()
         busy = self.thread is not None
         code = row.data(0, Qt.UserRole) if row else None
-        installed = bool(row) and row.text(2).startswith(INSTALLED)
-        self.download_btn.setText("Use" if installed else "Download")
+        installed = bool(row) and bool(row.data(2, STATE))
+        self.download_btn.setText(tr("Use") if installed else tr("Download"))
         self.download_btn.setEnabled(bool(row) and not busy and (installed or row.data(1, Qt.UserRole) is not None))
         self.remove_btn.setEnabled(bool(code) and not busy and spell.user_installed(code))
         self.table.setEnabled(not busy)
@@ -151,7 +153,7 @@ class DictionaryDialog(QDialog):
         if row is None or self.thread is not None:
             return
         code = row.data(0, Qt.UserRole)
-        if row.text(2).startswith(INSTALLED):
+        if row.data(2, STATE):
             self._use(code)
             return
         lang = row.data(1, Qt.UserRole)
@@ -162,7 +164,7 @@ class DictionaryDialog(QDialog):
         self.bar.setVisible(True)
         self.bar.setRange(0, 100)
         self.bar.setValue(0)
-        self.status.setText(f"Downloading {lang.name}...")
+        self.status.setText(tr("Downloading {name}...").format(name=spell.language_name(lang.code)))
         self._update_buttons()
         self.thread.start()
 
@@ -183,7 +185,7 @@ class DictionaryDialog(QDialog):
     def _done(self, path: str) -> None:
         lang = self.thread.lang
         self._finish_thread()
-        self.status.setText(f"{lang.name} is installed and in use.")
+        self.status.setText(tr("{name} is installed and in use.").format(name=spell.language_name(lang.code)))
         self._use(lang.code)
 
     def _failed(self, message: str) -> None:
@@ -191,27 +193,27 @@ class DictionaryDialog(QDialog):
         self._finish_thread()
         self.status.setText("")
         self._update_buttons()
-        popups.error(self, f"Could not download {lang.name}",
-                     "Check your internet connection and try again.", details=message)
+        popups.error(self, tr("Could not download {name}").format(name=spell.language_name(lang.code)),
+                     tr("Check your internet connection and try again."), details=message)
 
     def _use(self, code: str) -> None:
         self.win.refresh_spell_languages(select=code)
         self.fill()
         self.select(code)
         if not self.status.text():
-            self.status.setText(f"{spell.language_name(code)} is now used for spell checking.")
+            self.status.setText(tr("{language_name} is now used for spell checking.").format(language_name=spell.language_name(code)))
 
     def remove(self) -> None:
         code = self.selected()
         if not code or not spell.user_installed(code):
             return
-        if not popups.confirm(self, f"Remove {spell.language_name(code)}?",
-                              "The dictionary will be deleted. You can download it again at any time.",
-                              ok="Remove", danger=True, default_ok=False):
+        if not popups.confirm(self, tr("Remove {language_name}?").format(language_name=spell.language_name(code)),
+                              tr("The dictionary will be deleted. You can download it again at any time."),
+                              ok=tr("Remove"), danger=True, default_ok=False):
             return
         spell.remove_dictionary(code)
         self.win.refresh_spell_languages()
-        self.status.setText(f"{spell.language_name(code)} was removed.")
+        self.status.setText(tr("{language_name} was removed.").format(language_name=spell.language_name(code)))
         self.fill()
 
     def reject(self) -> None:

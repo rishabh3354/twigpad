@@ -41,6 +41,29 @@ QT_QPA_PLATFORM=offscreen python3 -m unittest discover -s tests -t .
 `QT_QPA_PLATFORM=offscreen` lets the window tests run without a display.
 `pytest` works too once the dev extras are installed.
 
+## Translations
+
+Every text the app shows goes through `tr("English text")` (from
+`twigpad.i18n`); texts with values use named fields,
+`tr("Delete {name}?").format(name=...)`, and texts that depend on a number
+use `ntr("{n} node", "{n} nodes", n)`. Texts kept in tables (menu names,
+say) are marked with `N_("...")` and passed through `tr()` where they are
+shown. Never build a sentence from pieces or use an f-string inside `tr()`.
+
+The translations are JSON files in `src/twigpad/resources/i18n/`, one per
+language, mapping each English text to its translation (a list of plural
+forms for `ntr()` texts: one for Chinese and Japanese, three for Russian, two
+otherwise). To see what a language is missing:
+
+```bash
+python3 tools/i18n_strings.py --check
+```
+
+The tests fail when a language misses a text or a translation uses a field
+the English text does not have. To add a language, add it to
+`i18n.LANGUAGES` (and to `PLURAL_FORMS`/`plural_index` if its plurals differ),
+start its file from `python3 tools/i18n_strings.py --json`, and translate.
+
 ## Layout
 
 | Path | Contents |
@@ -49,7 +72,8 @@ QT_QPA_PLATFORM=offscreen python3 -m unittest discover -s tests -t .
 | `src/twigpad/hjt.py` | `.hjt` reader and writer (no Qt) |
 | `src/twigpad/search.py`, `links.py`, `export.py`, `model.py`, `rtf.py` | Core logic (no Qt) |
 | `src/twigpad/ui/` | Qt widgets: main window, tree, find dialog, link highlighter, icons |
-| `src/twigpad/resources/` | Files shipped inside the package (app icon) |
+| `src/twigpad/resources/` | Files shipped inside the package (app icon, translations in `i18n/`) |
+| `tools/` | Developer scripts (`i18n_strings.py` checks the translations) |
 | `data/` | Desktop integration: `.desktop` entry, AppStream metadata, MIME type |
 | `docs/` | User guide and file format notes |
 | `tests/` | Unit tests and sample files |

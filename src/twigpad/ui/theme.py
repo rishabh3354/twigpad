@@ -16,11 +16,13 @@ from typing import Dict, Optional
 from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import QApplication, QStyleFactory
 
+from ..i18n import N_
+
 THEMES = {
-    "auto": "&Automatic (Follow the Desktop)",
-    "light": "&Light",
-    "dark": "&Dark",
-    "system": "Desktop &Style",
+    "auto": N_("&Automatic (Follow the Desktop)"),
+    "light": N_("&Light"),
+    "dark": N_("&Dark"),
+    "system": N_("Desktop &Style"),
 }
 
 LIGHT: Dict[str, str] = {

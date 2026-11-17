@@ -12,8 +12,9 @@ from PyQt5.QtWidgets import QAbstractItemView, QTreeWidget, QTreeWidgetItem
 
 from ..model import Document, Node
 from . import treestyle
+from ..i18n import tr
 
-DEFAULT_TITLE = "New node"
+DEFAULT_TITLE = tr("New node")
 
 
 def short(title: str, size: int = 32) -> str:
@@ -208,7 +209,7 @@ class NoteTree(QTreeWidget):
             node.add_child(NoteTree.item_to_node(item.child(i)))
         return node
 
-    @recorded("Insert")
+    @recorded(tr("Insert"))
     def insert_nodes(self, nodes: List[Node], parent: Optional[QTreeWidgetItem], index: int) -> List[NoteItem]:
         """Insert copies of ``nodes`` (with their subtrees) and select the first."""
         target = parent or self.invisibleRootItem()
@@ -308,7 +309,7 @@ class NoteTree(QTreeWidget):
     def is_top(item: Optional[QTreeWidgetItem]) -> bool:
         return item is not None and item.parent() is None
 
-    @recorded("Add Node")
+    @recorded(tr("Add Node"))
     def add_sibling(self, after: bool = True, title: str = DEFAULT_TITLE) -> Optional[NoteItem]:
         cur = self.currentItem()
         if self.is_view_top(cur):
@@ -324,7 +325,7 @@ class NoteTree(QTreeWidget):
         self.structureChanged.emit()
         return new
 
-    @recorded("Add Node")
+    @recorded(tr("Add Node"))
     def add_child(self, title: str = DEFAULT_TITLE) -> NoteItem:
         cur = self.currentItem()
         if cur is None:
@@ -336,7 +337,7 @@ class NoteTree(QTreeWidget):
         self.structureChanged.emit()
         return new
 
-    @recorded(lambda self, item: f"Delete {short(item.title)}")
+    @recorded(lambda self, item: tr("Delete {name}").format(name=short(item.title)))
     def remove_item(self, item: NoteItem) -> bool:
         if self.is_top(item) and self.topLevelItemCount() == 1:
             return False
@@ -356,7 +357,7 @@ class NoteTree(QTreeWidget):
         self.structureChanged.emit()
         return True
 
-    @recorded("Move Up")
+    @recorded(tr("Move Up"))
     def move_up(self) -> bool:
         cur = self.currentItem()
         if cur is None or self.is_view_top(cur) or self.index_in_parent(cur) == 0:
@@ -364,7 +365,7 @@ class NoteTree(QTreeWidget):
         self.move_item(cur, cur.parent(), self.index_in_parent(cur) - 1)
         return True
 
-    @recorded("Move Down")
+    @recorded(tr("Move Down"))
     def move_down(self) -> bool:
         cur = self.currentItem()
         if cur is None or self.is_view_top(cur):
@@ -376,7 +377,7 @@ class NoteTree(QTreeWidget):
         self.move_item(cur, cur.parent(), idx + 1)
         return True
 
-    @recorded("Move Out a Level")
+    @recorded(tr("Move Out a Level"))
     def move_left(self) -> bool:
         """Promote: become the next sibling of the current parent."""
         cur = self.currentItem()
@@ -387,7 +388,7 @@ class NoteTree(QTreeWidget):
         self.move_item(cur, grand, self._siblings_parent(parent).indexOfChild(parent) + 1)
         return True
 
-    @recorded("Move In a Level")
+    @recorded(tr("Move In a Level"))
     def move_right(self) -> bool:
         """Demote: become the last child of the previous sibling."""
         cur = self.currentItem()
@@ -400,7 +401,7 @@ class NoteTree(QTreeWidget):
         self.move_item(cur, prev, prev.childCount())
         return True
 
-    @recorded("Move Nodes In")
+    @recorded(tr("Move Nodes In"))
     def move_next_siblings_right(self) -> int:
         """The nodes after the selected one (same level) become its last
         children. Returns how many nodes moved."""
@@ -425,7 +426,7 @@ class NoteTree(QTreeWidget):
         self.structureChanged.emit()
         return len(moved)
 
-    @recorded("Move Nodes Out")
+    @recorded(tr("Move Nodes Out"))
     def move_children_left(self) -> int:
         """The children of the selected node become its siblings, placed right
         after it. Not possible on the top node. Returns how many nodes moved."""
@@ -465,7 +466,7 @@ class NoteTree(QTreeWidget):
             return True
         return False
 
-    @recorded("Sort")
+    @recorded(tr("Sort"))
     def sort_children(self, item: QTreeWidgetItem, recursive: bool = False) -> bool:
         """Sort the children of ``item`` by title (and their children too when
         ``recursive``). The selected node and expanded branches are kept."""
@@ -557,5 +558,5 @@ class NoteTree(QTreeWidget):
         # move here is safe: the node is moved exactly once, by move_item.
         event.setDropAction(Qt.MoveAction)
         event.accept()
-        with self.recording(f"Move {short(item.title)}"):
+        with self.recording(tr("Move {name}").format(name=short(item.title))):
             self.move_item(item, parent, index)

@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
+from .i18n import tr
+
 
 @dataclass(eq=False)
 class Node:
@@ -82,6 +84,6 @@ class Document:
         for node in tops:
             new_root.add_child(node)
         self.warnings.append(
-            f"The file had {len(tops)} top-level nodes; they were placed under a new "
-            f"top node \"{title}\", because a tree file can have only one top node.")
+            tr("The file had {n} top-level nodes; they were placed under a new top node “{title}”, "
+               "because a tree file can have only one top node.").format(n=len(tops), title=title))
         return True

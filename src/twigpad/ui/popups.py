@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
 )
 
 from . import iconset
+from ..i18n import tr
 
 INFO, QUESTION, WARNING, ERROR, SUCCESS = "info", "question", "warning", "error", "success"
 _ACCENT = {INFO: "blue", QUESTION: "blue", WARNING: "amber", ERROR: "red", SUCCESS: "green"}
@@ -139,7 +140,7 @@ class MessageDialog(QDialog):
         if details:
             toggle = QToolButton()
             toggle.setObjectName("popup-toggle")
-            toggle.setText("Show Details")
+            toggle.setText(tr("Show Details"))
             toggle.setCursor(Qt.PointingHandCursor)
             self.details = QPlainTextEdit(details)
             self.details.setObjectName("popup-details")
@@ -150,7 +151,7 @@ class MessageDialog(QDialog):
             def flip():
                 show = not self.details.isVisible()
                 self.details.setVisible(show)
-                toggle.setText("Hide Details" if show else "Show Details")
+                toggle.setText(tr("Hide Details") if show else tr("Show Details"))
                 self.adjustSize()
             toggle.clicked.connect(flip)
             col.addWidget(toggle, 0, Qt.AlignLeft)
@@ -239,17 +240,17 @@ def error(parent, title: str, text: str = "", details: str = "") -> None:
     show(parent, ERROR, title, text, details=details)
 
 
-def confirm(parent, title: str, text: str = "", ok: str = "OK", cancel: str = "Cancel",
+def confirm(parent, title: str, text: str = "", ok: str = "", cancel: str = "",
             danger: bool = False, kind: str = QUESTION, default_ok: bool = True) -> bool:
     """Two buttons; True when the user pressed ``ok``."""
-    buttons = (("cancel", cancel, CANCEL), ("ok", ok, DANGER if danger else PRIMARY))
+    buttons = (("cancel", cancel or tr("Cancel"), CANCEL), ("ok", ok or tr("OK"), DANGER if danger else PRIMARY))
     return show(parent, kind, title, text, buttons, "ok" if default_ok else "cancel") == "ok"
 
 
 def get_text(parent, title: str, text: str = "", value: str = "", password: bool = False,
-             ok: str = "OK", placeholder: str = "", kind: str = QUESTION) -> Optional[str]:
+             ok: str = "", placeholder: str = "", kind: str = QUESTION) -> Optional[str]:
     """Ask for one line of text (None when cancelled)."""
-    dlg = MessageDialog(parent, kind, title, text, (("cancel", "Cancel", CANCEL), ("ok", ok, PRIMARY)))
+    dlg = MessageDialog(parent, kind, title, text, (("cancel", tr("Cancel"), CANCEL), ("ok", ok or tr("OK"), PRIMARY)))
     edit = QLineEdit(value)
     edit.setObjectName("popup-input")
     edit.setPlaceholderText(placeholder)

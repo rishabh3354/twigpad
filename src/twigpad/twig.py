@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from .hjt import write_atomic
+from .i18n import N_, tr
 from .model import Document, Node
 
 FORMAT = "twigpad"
@@ -60,7 +61,7 @@ for _name in ("Crypto.Cipher.AES", "Cryptodome.Cipher.AES"):
         break
 
 NONCE_SIZE, TAG_SIZE = 12, 16
-MISSING_CRYPTO = "the Python package PyCryptodome (python3-pycryptodome)"
+MISSING_CRYPTO = N_("the Python package PyCryptodome (python3-pycryptodome)")
 
 
 class TwigFormatError(ValueError):
@@ -133,7 +134,7 @@ def _node_to_dict(node: Node) -> dict:
 
 def _dict_to_node(d: dict) -> Node:
     if not isinstance(d, dict):
-        raise TwigFormatError("A note in the file is damaged.")
+        raise TwigFormatError(tr("A note in the file is damaged."))
     color = str(d.get("color", ""))
     node = Node(str(d.get("title", "")) or "Untitled", str(d.get("text", "")),
                 html=str(d.get("html", "")), icon=str(d.get("icon", ""))[:40],
@@ -160,20 +161,20 @@ def from_json(raw: bytes) -> Document:
     try:
         data = json.loads(raw.decode("utf-8-sig"))
     except (UnicodeDecodeError, ValueError) as exc:
-        raise TwigFormatError(f"The file is damaged: {exc}") from None
+        raise TwigFormatError(tr("The file is damaged: {error}").format(error=exc)) from None
     if not isinstance(data, dict) or data.get("format") != FORMAT:
-        raise TwigFormatError("This is not a Twigpad notes file.")
+        raise TwigFormatError(tr("This is not a Twigpad notes file."))
     doc = Document()
     if int(data.get("version", 1)) > VERSION:
-        doc.warnings.append("The file was made by a newer version of Twigpad; "
-                            "anything this version doesn't know about was left out.")
+        doc.warnings.append(tr("The file was made by a newer version of Twigpad; "
+                               "anything this version doesn't know about was left out."))
     for d in data.get("nodes", []) or []:
         doc.root.add_child(_dict_to_node(d))
     for name, b64 in (data.get("images") or {}).items():
         try:
             doc.images[name] = base64.b64decode(b64)
         except (ValueError, TypeError):
-            doc.warnings.append(f"Image {name} is damaged and was left out.")
+            doc.warnings.append(tr("Image {name} is damaged and was left out.").format(name=name))
     doc.encoding = "utf-8"
     return doc
 
@@ -182,7 +183,7 @@ def from_json(raw: bytes) -> Document:
 
 def encrypt(plain: bytes, info: KeyInfo) -> bytes:
     if AES is None:
-        raise OSError(f"Password protection needs {MISSING_CRYPTO}.")
+        raise OSError(tr("Password protection needs {package}.").format(package=tr(MISSING_CRYPTO)))
     header = json.dumps({"version": VERSION, "cipher": "AES-256-GCM", "kdf": "scrypt",
                          "n": info.n, "r": info.r, "p": info.p,
                          "salt": base64.b64encode(info.salt).decode("ascii")}).encode() + b"\n"
@@ -195,28 +196,28 @@ def _read_header(data: bytes):
     rest = data[len(ENC_MAGIC):]
     line_end = rest.find(b"\n")
     if line_end < 0:
-        raise TwigFormatError("The encrypted file is damaged.")
+        raise TwigFormatError(tr("The encrypted file is damaged."))
     header = rest[: line_end + 1]
     try:
         h = json.loads(header)
         salt = base64.b64decode(h["salt"])
         params = (int(h.get("n", SCRYPT_N)), int(h.get("r", SCRYPT_R)), int(h.get("p", SCRYPT_P)))
     except (ValueError, KeyError, TypeError):
-        raise TwigFormatError("The encrypted file is damaged.") from None
+        raise TwigFormatError(tr("The encrypted file is damaged.")) from None
     return header, salt, params, rest[line_end + 1:]
 
 
 def decrypt(data: bytes, password: Optional[str] = None, info: Optional[KeyInfo] = None):
     """Returns (plain JSON bytes, KeyInfo)."""
     if AES is None:
-        raise OSError(f"Opening password-protected files needs {MISSING_CRYPTO}.")
+        raise OSError(tr("Opening password-protected files needs {package}.").format(package=tr(MISSING_CRYPTO)))
     header, salt, (n, r, p), body = _read_header(data)
     if info is None or info.salt != salt:
         if password is None:
             raise PasswordRequired()
         info = derive_key(password, salt, n, r, p)
     if len(body) < NONCE_SIZE + TAG_SIZE:
-        raise TwigFormatError("The encrypted file is damaged.")
+        raise TwigFormatError(tr("The encrypted file is damaged."))
     nonce, cipher_text, tag = body[:NONCE_SIZE], body[NONCE_SIZE:-TAG_SIZE], body[-TAG_SIZE:]
     try:
         packed = _gcm(info.key, nonce, ENC_MAGIC + header).decrypt_and_verify(cipher_text, tag)
@@ -225,7 +226,7 @@ def decrypt(data: bytes, password: Optional[str] = None, info: Optional[KeyInfo]
     try:
         return zlib.decompress(packed), info
     except zlib.error:
-        raise TwigFormatError("The encrypted file is damaged.") from None
+        raise TwigFormatError(tr("The encrypted file is damaged.")) from None
 
 
 # ---------------------------------------------------------------- files

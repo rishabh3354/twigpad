@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import (
     QApplication, QDialog, QDialogButtonBox, QFontComboBox, QGridLayout, QLabel, QPushButton,
     QSpinBox, QVBoxLayout,
 )
+from ..i18n import N_, tr
 
 # Well-made, widely installed sans-serif fonts, best first. The first one that
 # is installed becomes Twigpad's default; the desktop's font is the fallback.
@@ -18,14 +19,14 @@ UI_FAMILIES = ("Inter", "Inter Variable", "Noto Sans", "Cantarell", "Ubuntu", "R
                "Open Sans", "Source Sans 3", "Source Sans Pro", "Lato", "DejaVu Sans")
 
 PANES = ("app", "tree", "editor")
-PANE_NAMES = {"app": "Interface", "tree": "Tree", "editor": "Article"}
+PANE_NAMES = {"app": N_("Interface"), "tree": N_("Tree"), "editor": N_("Article")}
 # Default sizes in points: at least these, and a little larger than the
 # desktop's own font size for the tree and the article.
 MIN_SIZES = {"app": 10, "tree": 11, "editor": 12}
 EXTRA = {"app": 0, "tree": 1, "editor": 2}
-SAMPLES = {"app": "Menus, buttons and windows",
-           "tree": "Projects  ›  Ideas  ›  Reading list",
-           "editor": "The quick brown fox jumps over the lazy dog. 0123456789"}
+SAMPLES = {"app": N_("Menus, buttons and windows"),
+           "tree": N_("Projects  ›  Ideas  ›  Reading list"),
+           "editor": N_("The quick brown fox jumps over the lazy dog. 0123456789")}
 
 _desktop_font: Optional[QFont] = None
 
@@ -77,13 +78,14 @@ class FontsDialog(QDialog):
     def __init__(self, window, focus: str = "editor"):
         super().__init__(window)
         self.win = window
-        self.setWindowTitle("Fonts")
+        self.setWindowTitle(tr("Fonts"))
         self._old: Dict[str, str] = {w: window.settings.value(f"fonts/{w}", "", type=str) for w in PANES}
         self._old_zoom = {w: window.settings.value(f"view/{w}_zoom", None) for w in ("tree", "editor")}
         lay = QVBoxLayout(self)
         lay.setContentsMargins(20, 18, 20, 14)
         lay.setSpacing(12)
-        head = QLabel("<b>Choose the fonts Twigpad uses.</b> Changes show right away.")
+        head = QLabel(tr("<b>Choose the fonts Twigpad uses.</b> Changes show right away."))
+        head.setWordWrap(True)
         lay.addWidget(head)
         grid = QGridLayout()
         grid.setHorizontalSpacing(10)
@@ -92,14 +94,14 @@ class FontsDialog(QDialog):
         self.size: Dict[str, QSpinBox] = {}
         self.sample: Dict[str, QLabel] = {}
         for row, which in enumerate(PANES):
-            label = QLabel(f"{PANE_NAMES[which]}:")
+            label = QLabel(tr("{pane}:").format(pane=tr(PANE_NAMES[which])))
             family = QFontComboBox()
             family.setObjectName(f"font-{which}")
             size = QSpinBox()
             size.setRange(6, 48)
             size.setSuffix(" pt")
             label.setBuddy(family)
-            sample = QLabel(SAMPLES[which])
+            sample = QLabel(tr(SAMPLES[which]))
             sample.setObjectName("font-sample")
             sample.setTextInteractionFlags(Qt.NoTextInteraction)
             sample.setMinimumHeight(34)
@@ -110,13 +112,13 @@ class FontsDialog(QDialog):
             self.family[which], self.size[which], self.sample[which] = family, size, sample
         grid.setColumnStretch(1, 1)
         lay.addLayout(grid)
-        note = QLabel("Ctrl+= and Ctrl+- still make the tree or the article larger or smaller "
-                      "while you work; Ctrl+0 goes back to these sizes.")
+        note = QLabel(tr("Ctrl+= and Ctrl+- still make the tree or the article larger or smaller "
+                      "while you work; Ctrl+0 goes back to these sizes."))
         note.setWordWrap(True)
         note.setObjectName("hint")
         lay.addWidget(note)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.defaults = QPushButton("Restore Defaults")
+        self.defaults = QPushButton(tr("Restore Defaults"))
         buttons.addButton(self.defaults, QDialogButtonBox.ResetRole)
         buttons.button(QDialogButtonBox.Ok).setObjectName("accent")
         buttons.accepted.connect(self.accept)

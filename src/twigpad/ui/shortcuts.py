@@ -11,14 +11,15 @@ from PyQt5.QtWidgets import (
     QAction, QDialog, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMenu, QPushButton, QTreeWidget,
     QTreeWidgetItem, QVBoxLayout,
 )
+from ..i18n import N_, tr
 
 # Shortcuts that are not menu items.
 EXTRA: List[Tuple[str, str]] = [
-    ("Make the text larger or smaller", "Ctrl+Mouse Wheel"),
-    ("Follow a link in the article", "Ctrl+Click"),
-    ("Scroll the tree without moving the selection", "Ctrl+Up, Ctrl+Down"),
-    ("Drop a dragged node beside another (not inside it)", "Shift+Drop"),
-    ("Right-click menu of the tree or the article", "Shift+F10"),
+    (N_("Make the text larger or smaller"), N_("Ctrl+Mouse Wheel")),
+    (N_("Follow a link in the article"), N_("Ctrl+Click")),
+    (N_("Scroll the tree without moving the selection"), "Ctrl+Up, Ctrl+Down"),
+    (N_("Drop a dragged node beside another (not inside it)"), N_("Shift+Drop")),
+    (N_("Right-click menu of the tree or the article"), "Shift+F10"),
 ]
 
 
@@ -59,29 +60,29 @@ def collect(window) -> List[Tuple[str, List[Tuple[str, str]]]]:
               if id(a) not in seen and keys(a) and name(a)]
     seen_rows = set()
     unique = []
-    for row in others + EXTRA:
+    for row in others + [(tr(what), tr(keys)) for what, keys in EXTRA]:
         if row not in seen_rows:
             seen_rows.add(row)
             unique.append(row)
-    groups.append(("Tree, Article and Mouse", sorted(unique, key=lambda r: r[0].casefold())))
+    groups.append((tr("Tree, Article and Mouse"), sorted(unique, key=lambda r: r[0].casefold())))
     return groups
 
 
 class ShortcutsDialog(QDialog):
     def __init__(self, window):
         super().__init__(window)
-        self.setWindowTitle("Keyboard Shortcuts")
+        self.setWindowTitle(tr("Keyboard Shortcuts"))
         lay = QVBoxLayout(self)
         lay.setContentsMargins(20, 18, 20, 14)
         lay.setSpacing(10)
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Search shortcuts, for example \"node\" or \"Ctrl+S\"")
+        self.search.setPlaceholderText(tr("Search shortcuts, for example \"node\" or \"Ctrl+S\""))
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(self.apply_filter)
         lay.addWidget(self.search)
         self.table = QTreeWidget()
         self.table.setObjectName("shortcuts")
-        self.table.setHeaderLabels(["Command", "Shortcut"])
+        self.table.setHeaderLabels([tr("Command"), tr("Shortcut")])
         self.table.setRootIsDecorated(False)
         self.table.setAlternatingRowColors(True)
         self.table.setUniformRowHeights(True)
@@ -106,15 +107,15 @@ class ShortcutsDialog(QDialog):
         self.table.setItemsExpandable(False)
         self.table.setIndentation(14)
         lay.addWidget(self.table, 1)
-        self.empty = QLabel("No shortcut matches your search.")
+        self.empty = QLabel(tr("No shortcut matches your search."))
         self.empty.setObjectName("hint")
         self.empty.setVisible(False)
         lay.addWidget(self.empty)
         row = QHBoxLayout()
-        hint = QLabel("Some shortcuts work only in the tree or only in the article.")
+        hint = QLabel(tr("Some shortcuts work only in the tree or only in the article."))
         hint.setObjectName("hint")
         row.addWidget(hint, 1)
-        close = QPushButton("Close")
+        close = QPushButton(tr("Close"))
         close.setDefault(True)
         close.clicked.connect(self.accept)
         row.addWidget(close)

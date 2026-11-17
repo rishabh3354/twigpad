@@ -32,7 +32,7 @@ def dump(path: str, show_text: bool) -> int:
     return 0
 
 
-def run_gui(path=None) -> int:
+def run_gui(path=None, language: str = "") -> int:
     from PyQt5.QtCore import QSettings, Qt, QTimer
     from PyQt5.QtWidgets import QApplication
 
@@ -46,14 +46,20 @@ def run_gui(path=None) -> int:
     app.setApplicationVersion(__version__)
     app.setDesktopFileName(DESKTOP_ID)
 
+    ini = portable_ini()
+    settings = QSettings(ini, QSettings.IniFormat) if ini else QSettings(APP_ID, APP_ID)
+    # The language is chosen before any window (or module with menu texts) is made.
+    from . import i18n
+    i18n.set_language(language or settings.value("view/language", i18n.AUTO, type=str))
+    i18n.install_qt_translations(app)
+
     from .ui.icons import app_icon
     from .ui.mainwindow import MainWindow
     app.setWindowIcon(app_icon())
-    ini = portable_ini()
     if ini:   # portable: keep crash-recovery copies on the stick, not on this computer
         from . import recovery
         recovery.FOLDER = os.path.join(os.path.dirname(ini), f"{APP_ID}-recovery")
-    win = MainWindow(QSettings(ini, QSettings.IniFormat) if ini else None)
+    win = MainWindow(settings if ini else None)
     win.show()
     if path:
         win.load_path(path)
@@ -69,10 +75,12 @@ def main(argv=None) -> int:
     p.add_argument("--version", action="version", version=f"{APP_NAME} {__version__}")
     p.add_argument("--dump", metavar="FILE", help="print the tree of a .hjt file and exit")
     p.add_argument("--text", action="store_true", help="with --dump, also print article text")
+    p.add_argument("--language", metavar="CODE", default="",
+                   help="language of the menus for this start (en, de, fr, es, it, pt_BR, ru, zh_CN, ja)")
     args = p.parse_args(argv)
     if args.dump:
         return dump(args.dump, args.text)
-    return run_gui(args.file)
+    return run_gui(args.file, args.language)
 
 
 if __name__ == "__main__":

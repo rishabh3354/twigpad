@@ -13,8 +13,9 @@ from PyQt5.QtWidgets import (
 )
 
 from .. import search
+from ..i18n import N_, ntr, tr
 
-NODE, ARTICLE, BOTH = "Node", "Article", "Article+Node"
+NODE, ARTICLE, BOTH = N_("Node"), N_("Article"), N_("Article+Node")   # shown translated
 
 
 class Hit(NamedTuple):
@@ -48,16 +49,16 @@ class TreeSearchDialog(QDialog):
     def __init__(self, win):
         super().__init__(win)
         self.win = win
-        self.setWindowTitle("Tree Search")
+        self.setWindowTitle(tr("Tree Search"))
         self.hits: List[Hit] = []
         self.subtree_root = None
 
         # --- search text, Find, hide option
         self.text_edit = QLineEdit()
-        self.find_btn = QPushButton("&Find")
-        self.hide_box = QCheckBox("&Hide search window after item is double clicked")
+        self.find_btn = QPushButton(tr("&Find"))
+        self.hide_box = QCheckBox(tr("&Hide search window after item is double clicked"))
         left = QGridLayout()
-        label = QLabel("<b>Search text:</b>")
+        label = QLabel(tr("<b>Search text:</b>"))
         label.setBuddy(self.text_edit)
         left.addWidget(label, 0, 0, 1, 2)
         left.addWidget(self.text_edit, 1, 0)
@@ -67,11 +68,11 @@ class TreeSearchDialog(QDialog):
         left.setRowStretch(3, 1)   # keep the search box at the top, as in the classic window
 
         # --- what to search, maximum rows
-        self.total_radio = QRadioButton("&Total tree")
-        self.subtree_radio = QRadioButton("S&ubtree")
-        self.nodes_box = QCheckBox("&Nodes")
-        self.articles_box = QCheckBox("&Articles")
-        group = QGroupBox("What to search:")
+        self.total_radio = QRadioButton(tr("&Total tree"))
+        self.subtree_radio = QRadioButton(tr("S&ubtree"))
+        self.nodes_box = QCheckBox(tr("&Nodes"))
+        self.articles_box = QCheckBox(tr("&Articles"))
+        group = QGroupBox(tr("What to search:"))
         g = QGridLayout(group)
         g.addWidget(self.total_radio, 0, 0)
         g.addWidget(self.subtree_radio, 1, 0)
@@ -81,7 +82,7 @@ class TreeSearchDialog(QDialog):
         self.max_spin = QSpinBox()
         self.max_spin.setRange(1, 100000)
         rows = QHBoxLayout()
-        rows_label = QLabel("Maximum number of\nrows in search result")
+        rows_label = QLabel(tr("Maximum number of\nrows in search result"))
         rows_label.setBuddy(self.max_spin)
         rows.addWidget(rows_label)
         rows.addWidget(self.max_spin)
@@ -98,7 +99,7 @@ class TreeSearchDialog(QDialog):
         # --- results
         self.count_label = QLabel()
         self.results = QTreeWidget()
-        self.results.setHeaderLabels(["Nr.", "Node", "Location", "Path"])
+        self.results.setHeaderLabels([tr("Nr."), tr("Node"), tr("Location"), tr("Path")])
         self.results.setRootIsDecorated(False)
         self.results.setUniformRowHeights(True)
         self.results.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -107,17 +108,17 @@ class TreeSearchDialog(QDialog):
         header.setStretchLastSection(True)
         header.setSectionResizeMode(QHeaderView.Interactive)
         fm = self.results.fontMetrics()
-        widths = (fm.horizontalAdvance("Nr.") + 26, 200, fm.horizontalAdvance(BOTH) + 24)
+        widths = (fm.horizontalAdvance(tr("Nr.")) + 26, 200, fm.horizontalAdvance(tr(BOTH)) + 24)
         for col, width in enumerate(widths):
             self.results.setColumnWidth(col, width)
 
         # --- bottom
-        self.search_article_btn = QPushButton("&Search Article")
-        self.search_article_btn.setToolTip("Find the search text in the article of the selected result")
-        self.close_btn = QPushButton("Close")
+        self.search_article_btn = QPushButton(tr("&Search Article"))
+        self.search_article_btn.setToolTip(tr("Find the search text in the article of the selected result"))
+        self.close_btn = QPushButton(tr("Close"))
         bottom = QHBoxLayout()
-        bottom.addWidget(QLabel("Double-click a search result item to select the\n"
-                                "corresponding tree node (or press enter)."))
+        bottom.addWidget(QLabel(tr("Double-click a search result item to select the\n"
+                                "corresponding tree node (or press enter).")))
         bottom.addStretch(1)
         bottom.addWidget(self.search_article_btn)
         bottom.addWidget(self.close_btn)
@@ -206,14 +207,15 @@ class TreeSearchDialog(QDialog):
         self.results.clear()
         rows = []
         for n, hit in enumerate(self.hits, 1):
-            row = QTreeWidgetItem([str(n), hit.item.title, hit.location, hit.path])
+            row = QTreeWidgetItem([str(n), hit.item.title, tr(hit.location), hit.path])
             row.setToolTip(3, hit.path)
             rows.append(row)
         self.results.addTopLevelItems(rows)
         total = len(found)
-        word = "item" if total == 1 else "items"
-        more = f" (showing the first {limit})" if total > limit else ""
-        self.count_label.setText(f"<b>{total} {word} found{more}</b>")
+        text = ntr("{n} item found", "{n} items found", total).format(n=total)
+        if total > limit:
+            text += " " + tr("(showing the first {limit})").format(limit=limit)
+        self.count_label.setText(f"<b>{text}</b>")
         if rows:
             self.results.setCurrentItem(rows[0])
             self.results.setFocus()

@@ -66,6 +66,7 @@ to start, simple to use, and built to last.
 - **Opens from your file manager.** Double-click a `.hjt` file to open it in Twigpad (one click to set up).
 - **Safe with other programs.** Warns when the file is changed by another program or a sync tool.
 - **Read-only mode, tray and portable mode.** Protect a file from changes, hide to the system tray with <kbd>Ctrl</kbd>+<kbd>M</kbd>, and keep settings on a USB stick.
+- **In your language.** Menus and windows in English, German, French, Spanish, Italian, Brazilian Portuguese, Russian, Simplified Chinese and Japanese; follows your desktop's language automatically (View → Language).
 - **Light and dark themes.** A clean light theme and an easy-on-the-eyes dark theme, or follow your desktop automatically.
 - **Comfortable to read.** A clean font and slightly larger text by default; choose your own fonts and zoom the tree or the article with <kbd>Ctrl</kbd>+mouse wheel.
 - **Move to a new computer easily.** Back up all your notes files and settings into one `.zip`, and restore them on the new computer; files already there are left alone.

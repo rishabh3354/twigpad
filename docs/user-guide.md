@@ -214,6 +214,12 @@ the `hunspell-de-de` package). Spell checking needs the Hunspell library
 - **Theme**: **Light**, **Dark**, **Automatic** (light or dark, following your
   desktop's setting; the default) or **Desktop Style** (your desktop's own
   look and colours).
+- **Language**: the language of the menus and windows. **Automatic** (the
+  default) follows your desktop's language; or choose English, Deutsch,
+  Français, Español, Italiano, Português (Brasil), Русский, 简体中文 or 日本語.
+  Twigpad asks to restart to switch (it asks about unsaved changes first, and
+  reopens the file you had open). Your notes are never translated. To try a
+  language for one start only, run `twigpad --language de`.
 - **Colours** sets the background and text colours of the tree and the
   article; **Restore Defaults** goes back to your desktop's colours.
 - **Toolbars**: the classic five, in this order:
@@ -393,6 +399,7 @@ back and deletes the file.
 
 ```bash
 twigpad [FILE]                 # open the window, optionally with a file
+twigpad --language CODE        # menus in another language for this start (de, fr, ja, ...)
 twigpad --dump FILE [--text]   # print a file's tree (and text) and exit
 twigpad --version
 ```
