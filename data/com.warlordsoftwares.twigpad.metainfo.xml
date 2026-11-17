@@ -5,27 +5,49 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <name>Twigpad</name>
-  <summary>Organize notes, ideas and knowledge in a tree</summary>
+  <summary>Tree notes editor that opens TreePad .hjt files</summary>
   <developer id="com.warlordsoftwares">
     <name>Rishabh Bhardwaj</name>
   </developer>
 
   <description>
     <p>
-      Twigpad is a fast, simple hierarchical notes editor. Notes are kept in a
-      tree on the left; the text of the selected note is on the right. It is a
-      notebook, outliner and personal knowledge base in one small window, and
-      everything is stored in a single plain-text file.
+      Twigpad is a fast, free tree notes editor and outliner for Linux. Your
+      notes sit in a tree on the left and the text of the selected note on the
+      right: the classic two-pane notepad layout. Nest notes as deep as you
+      like, move whole branches around and search everything at once. It works
+      offline, needs no account and keeps a whole notebook in one file.
     </p>
+    <p>
+      Coming from TreePad Lite? Twigpad opens and saves .hjt files directly,
+      with no Wine and no converting. Your tree, titles, text and links between
+      notes come across as they are, the familiar keys work (Ins, Shift+Ins,
+      Shift+arrows, F2, Ctrl+H), and the files you save still open on Windows.
+      Backup copies, zipped backups and damaged .hjt files open too.
+    </p>
+    <p>What you get:</p>
     <ul>
-      <li>Unlimited nesting: add, move, sort and drag notes anywhere in the tree</li>
-      <li>Find and replace across all note titles and text at once</li>
-      <li>Cut, copy and paste whole branches, also between windows</li>
-      <li>Opens and saves .hjt tree notes files, including backup copies and damaged files</li>
-      <li>Merge several files or backups into one</li>
-      <li>Export to plain text and print</li>
-      <li>Backup copy on save and optional auto-save</li>
+      <li>Unlimited nesting: add, move, sort, drag, cut, copy and paste whole branches</li>
+      <li>Find and replace across every note title and text at once</li>
+      <li>Formatted notes with headings, lists, colours, tables and pictures</li>
+      <li>Links between notes, #tags and backlinks</li>
+      <li>Password protection with AES-256 encryption</li>
+      <li>Spell check, with dictionaries for 50 languages a click away</li>
+      <li>Undo for the tree, a backup copy on save, auto-save and crash recovery</li>
+      <li>Import text and CSV files, export to text or HTML, and print</li>
+      <li>Focus on one branch, or open branches in tabs</li>
+      <li>Light and dark themes, a system tray icon and a portable mode</li>
+      <li>In English, German, French, Spanish, Italian, Brazilian Portuguese, Russian, Simplified Chinese and Japanese</li>
     </ul>
+    <p>
+      Use it as a personal knowledge base or wiki, for meeting and project
+      notes, research and writing outlines, a journal, recipes, code snippets
+      or as a personal information manager.
+    </p>
+    <p>
+      Twigpad is free software (GPL-3.0-or-later). It is an independent project
+      and is not affiliated with TreePad or its makers.
+    </p>
   </description>
 
   <screenshots>
@@ -76,7 +98,17 @@
     <keyword>knowledge base</keyword>
     <keyword>organizer</keyword>
     <keyword>hjt</keyword>
+    <keyword>treepad</keyword>
+    <keyword>note taking</keyword>
+    <keyword>personal wiki</keyword>
+    <keyword>pim</keyword>
   </keywords>
 
   <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.1.0" date="2026-11-17">
+      <url type="details">https://github.com/rishabh3354/twigpad/releases/tag/v0.1.0</url>
+    </release>
+  </releases>
 </component>

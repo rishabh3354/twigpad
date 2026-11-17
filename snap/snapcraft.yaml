@@ -3,7 +3,9 @@
 name: twigpad
 title: Twigpad
 base: core22
-adopt-info: twigpad          # version from twigpad.__version__; summary and description from the metainfo
+adopt-info: twigpad          # version from twigpad.__version__; the description from the metainfo
+# The store summary (up to 78 characters; the metainfo's is kept short for software centres).
+summary: Tree notes outliner for Linux that opens and saves TreePad Lite .hjt files
 grade: stable
 confinement: strict
 license: GPL-3.0-or-later
