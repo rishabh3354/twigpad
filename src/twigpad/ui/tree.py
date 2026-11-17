@@ -69,6 +69,7 @@ class NoteTree(QTreeWidget):
         self.classic = False
         self.hoisted: Optional[NoteItem] = None   # branch shown alone ("focus"), or None
         self._hidden: List[QTreeWidgetItem] = []
+        self.icon_px = treestyle.ICON
         self.setItemDelegate(treestyle.TreeDelegate(self))
         self.set_classic(True)
 
@@ -77,11 +78,16 @@ class NoteTree(QTreeWidget):
     def set_classic(self, on: bool) -> None:
         """Classic look: folder icons, dotted lines, +/- boxes."""
         self.classic = on
-        self.setIndentation(treestyle.INDENT if on else self.style().pixelMetric(
+        self.setIndentation(max(treestyle.INDENT, self.icon_px + 3) if on else self.style().pixelMetric(
             self.style().PM_TreeViewIndentation, None, self))
-        self.setIconSize(QSize(treestyle.ICON, treestyle.ICON))
+        self.setIconSize(QSize(self.icon_px, self.icon_px))
         self.scheduleDelayedItemsLayout()
         self.viewport().update()
+
+    def set_icon_px(self, px: int) -> None:
+        """Size of the note icons (folders) in pixels."""
+        self.icon_px = px
+        self.set_classic(self.classic)
 
     def drawBranches(self, painter, rect, index) -> None:
         if self.classic:

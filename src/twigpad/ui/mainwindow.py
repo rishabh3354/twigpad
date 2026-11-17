@@ -8,7 +8,7 @@ import zipfile
 from typing import List, Optional
 
 from PyQt5.QtCore import (
-    QDateTime, QEvent, QFileSystemWatcher, QLocale, QMimeData, QSettings, Qt, QTimer, QUrl,
+    QDateTime, QEvent, QFileSystemWatcher, QLocale, QMimeData, QSettings, QSize, Qt, QTimer, QUrl,
 )
 from PyQt5.QtGui import (
     QColor, QDesktopServices, QPalette, QFont, QIcon, QImage, QKeySequence, QPixmap, QTextBlockFormat,
@@ -22,13 +22,14 @@ from PyQt5.QtWidgets import (
 )
 
 from .. import (
-    APP_ID, APP_NAME, __version__, export, hjt, importers, links, portable, search, spell, tags,
-    textfmt, twig,
+    APP_ID, APP_NAME, __version__, developer, export, hjt, importers, links, portable, search, spell,
+    tags, textfmt, twig,
 )
 from ..model import Document, Node
-from . import icons, treestyle
+from . import icons, iconset, theme, treestyle
 from .editor import ArticleEdit, heading_format
 from .finddialog import FindDialog
+from .treesearch import TreeSearchDialog
 from .highlighter import ArticleHighlighter
 from .panels import BacklinksPanel, TagsPanel
 from .tree import NoteItem, NoteTree
@@ -50,6 +51,13 @@ STARTUP_MODES = {"reopen": "&Reopen the Last File", "ask": "&Ask Whether to Reop
 CLOSE_MODES = {"ask": "&Ask Whether to Save", "save": "&Save Automatically",
                "discard": "&Don't Save (not recommended)"}
 COLOR_KEYS = ("tree_bg", "tree_fg", "article_bg", "article_fg")
+TOOLBAR_ICON_SIZES = {"&Small": 16, "&Medium": 20, "&Large": 24, "&Extra Large": 32}
+DEFAULT_TOOLBAR_ICON_SIZE = 24
+TOOLBAR_LABELS = {"icons": ("&Icons Only", Qt.ToolButtonIconOnly),
+                  "beside": ("Text &Beside Icons", Qt.ToolButtonTextBesideIcon),
+                  "under": ("Text &Under Icons", Qt.ToolButtonTextUnderIcon)}
+TREE_ICON_SIZES = {"&Small": 16, "&Medium": 20, "&Large": 24, "&Extra Large": 32}
+ZOOM_RANGE = (-6, 24)   # points added to the chosen font size
 NEW_FILE_TITLE = "Notes"
 NODE_MIME = "application/x-twigpad-notes"
 MAX_RECENT = 10
@@ -68,6 +76,7 @@ class MainWindow(QMainWindow):
         self._editor_dirty = False
         self._backed_up_path: Optional[str] = None
         self._find_dialog: Optional[FindDialog] = None
+        self._tree_search: Optional[TreeSearchDialog] = None
         self.read_only = False
         self.view_mode = "both"
         self._tray: Optional[QSystemTrayIcon] = None
@@ -326,6 +335,10 @@ class MainWindow(QMainWindow):
         self.act_find = self._action("&Find...", self.find_here, ["Ctrl+F", "Shift+F12"],
                                      icons.themed("edit-find", S.SP_FileDialogContentsView),
                                      "Search titles and articles of all nodes")
+        self.act_search_tree = self._action(
+            "Search &Tree...", self.search_tree, "Shift+F11",
+            icons.themed("system-search", S.SP_FileDialogContentsView),
+            "Search the titles and articles of the whole tree")
         self.act_find_next = self._action("Find &Next", lambda: self.find_again(False), "F3")
         self.act_find_prev = self._action("Find &Previous", lambda: self.find_again(True), "Shift+F3")
         self.act_replace = self._action("&Replace...", lambda: self.show_find(True), "Ctrl+R")
@@ -444,7 +457,27 @@ class MainWindow(QMainWindow):
                                             tip="Jump between the tree and the article")
         self.act_article_font = self._action("&Article Font...", lambda: self.choose_font("editor"))
         self.act_tree_font = self._action("&Tree Font...", lambda: self.choose_font("tree"))
-        self.act_reset_fonts = self._action("&Reset Fonts", self.reset_fonts)
+        self.act_reset_fonts = self._action("&Reset Fonts", self.reset_fonts,
+                                            tip="Default fonts and text sizes for the tree and the article")
+        self.act_zoom_in = self._action("&Larger Text", lambda: self.zoom_text(self._zoom_target(), 1),
+                                        ["Ctrl+=", "Ctrl++"],
+                                        tip="Make the text of the tree or the article (where you are) larger")
+        self.act_zoom_out = self._action("&Smaller Text", lambda: self.zoom_text(self._zoom_target(), -1),
+                                         "Ctrl+-",
+                                         tip="Make the text of the tree or the article (where you are) smaller")
+        self.act_zoom_reset = self._action("&Normal Text Size", lambda: self.zoom_text(self._zoom_target(), 0),
+                                           "Ctrl+0")
+        self.act_tree_larger = self._action("&Tree Text Larger", lambda: self.zoom_text("tree", 1))
+        self.act_tree_smaller = self._action("Tree Text S&maller", lambda: self.zoom_text("tree", -1))
+        self.act_article_larger = self._action("&Article Text Larger", lambda: self.zoom_text("editor", 1))
+        self.act_article_smaller = self._action("Article Text Sm&aller", lambda: self.zoom_text("editor", -1))
+        self.tree_icon_group = QActionGroup(self)
+        self.act_tree_icon_sizes = {}
+        for label, px in TREE_ICON_SIZES.items():
+            act = QAction(f"{label} ({px} px)", self, checkable=True)
+            act.triggered.connect(lambda _c=False, n=px: self.set_tree_icon_size(n))
+            self.tree_icon_group.addAction(act)
+            self.act_tree_icon_sizes[px] = act
         self.act_pane_colors = self._action("Colo&urs...", self.choose_pane_colors,
                                             tip="Background and text colours of the tree and the article")
 
@@ -496,6 +529,25 @@ class MainWindow(QMainWindow):
                                         "(for example the hunspell-en-us package)")
 
         self.act_about = self._action(f"&About {APP_NAME}", self.about)
+        self.act_donate = self._action("&Support the Developer (Donate)...",
+                                       lambda: self.open_web(developer.DONATE_URL),
+                                       icon=treestyle.note_icon("heart"),
+                                       tip=f"Donate to {developer.DEVELOPER} with PayPal")
+        self.act_more_apps = self._action(f"&More Apps by {developer.COMPANY}...", self.show_more_apps,
+                                          tip="Other apps by the developer of Twigpad")
+        self.act_report_bug = self._action("&Report a Bug...", self.report_bug,
+                                           tip="Report a problem on GitHub (opens your web browser)")
+        self.act_developer = self._action("About the &Developer",
+                                          lambda: self.open_web(developer.DEVELOPER_URL),
+                                          tip=f"{developer.DEVELOPER}'s page on the web")
+
+        self.theme_group = QActionGroup(self)
+        self.act_themes = {}
+        for name, label in theme.THEMES.items():
+            act = QAction(label, self, checkable=True)
+            act.triggered.connect(lambda _c=False, n=name: self.set_theme(n))
+            self.theme_group.addAction(act)
+            self.act_themes[name] = act
 
     def _create_menus(self) -> None:
         mb = self.menuBar()
@@ -564,7 +616,7 @@ class MainWindow(QMainWindow):
         m.addActions([self.act_strip, self.act_strip_returns])
 
         m = mb.addMenu("&Search")
-        m.addActions([self.act_find, self.act_find_next, self.act_find_prev])
+        m.addActions([self.act_find, self.act_search_tree, self.act_find_next, self.act_find_prev])
         m.addSeparator()
         m.addAction(self.act_replace)
 
@@ -575,6 +627,8 @@ class MainWindow(QMainWindow):
         m.addActions(list(self.act_view_modes.values()))
         m.addSeparator()
         m.addActions([self.act_word_wrap, self.act_classic_tree])
+        sub = m.addMenu("&Theme")
+        sub.addActions(list(self.act_themes.values()))
         m.addSeparator()
         m.addActions([self.act_focus, self.act_focus_out, self.act_unfocus])
         m.addSeparator()
@@ -590,11 +644,19 @@ class MainWindow(QMainWindow):
             panels.addAction(act)
         m.addSeparator()
         m.addActions([self.act_article_font, self.act_tree_font, self.act_reset_fonts, self.act_pane_colors])
+        sub = m.addMenu("Text Si&ze")
+        sub.addActions([self.act_zoom_in, self.act_zoom_out, self.act_zoom_reset])
+        sub.addSeparator()
+        sub.addActions([self.act_tree_larger, self.act_tree_smaller, self.act_article_larger,
+                        self.act_article_smaller])
+        sub = m.addMenu("Tree &Icon Size")
+        sub.addActions(list(self.act_tree_icon_sizes.values()))
         m.addSeparator()
         self.view_menu = m
         m.addAction(self.act_switch_pane)
 
         m = mb.addMenu("&Options")
+        self.options_menu = m
         sub = m.addMenu("At &Startup")
         sub.addActions(list(self.act_startup.values()))
         sub = m.addMenu("When &Closing With Unsaved Changes")
@@ -612,11 +674,16 @@ class MainWindow(QMainWindow):
         langs.setEnabled(bool(self.act_spell_langs))
 
         m = mb.addMenu("&Help")
+        m.addAction(self.act_report_bug)
+        m.addSeparator()
+        m.addActions([self.act_donate, self.act_more_apps, self.act_developer])
+        m.addSeparator()
         m.addAction(self.act_about)
 
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._tree_menu)
         self.tree.installEventFilter(self)
+        self.tree.viewport().installEventFilter(self)   # Ctrl+wheel resizes the tree text
 
     def _node_menu_actions(self) -> List[QAction]:
         sep = lambda: self._separator()  # noqa: E731
@@ -648,31 +715,37 @@ class MainWindow(QMainWindow):
         menu.exec_(self.tree.viewport().mapToGlobal(pos))
 
     def _create_toolbar(self) -> None:
-        """Five toolbars; show or hide them in View > Toolbars and drag them
-        by their handle to move them."""
+        """The classic five toolbars, in the classic order: File, Article Edit,
+        Tree Edit, View and Navigate, plus an Extras toolbar (off at first)
+        for Twigpad's own commands. Right-click the toolbar area or use
+        View > Toolbars to show or hide them; drag a handle to move one."""
+        from PyQt5.QtWidgets import QToolButton
         S = QStyle
-        self.act_cut.setIcon(icons.themed_drawn("edit-cut", icons.cut))
-        self.act_copy.setIcon(icons.themed_drawn("edit-copy", icons.copy))
-        self.act_paste.setIcon(icons.themed_drawn("edit-paste", icons.paste))
-        self.act_follow_link.setIcon(icons.themed("go-jump", S.SP_CommandLink))
-        self.act_bold.setIcon(icons.themed_drawn("format-text-bold", icons.bold))
-        self.act_italic.setIcon(icons.themed_drawn("format-text-italic", icons.italic))
-        self.act_prev_sibling.setIcon(icons.themed("go-top", S.SP_ArrowUp))
-        self.act_next_sibling.setIcon(icons.themed("go-bottom", S.SP_ArrowDown))
+        self.act_options = QAction(icons.themed_drawn("preferences-system", icons.wrench), "Options", self)
+        self.act_options.setToolTip("Options")
+        self.act_options.setStatusTip("Program options")
+        self.act_options.setMenu(self.options_menu)
+        self.act_options.triggered.connect(self._show_options_menu)
         self.act_focus.setIcon(icons.themed("zoom-in", S.SP_FileDialogContentsView))
         self.act_unfocus.setIcon(icons.themed("zoom-original", S.SP_FileDialogListView))
         self.act_word_wrap.setIcon(icons.themed("format-justify-fill", S.SP_FileDialogDetailedView))
+        self.act_follow_link.setIcon(icons.themed_drawn("applications-internet", icons.globe))
+        self._set_drawn_icons()
         bars = [
-            ("file-toolbar", "File", [self.act_new, self.act_open, self.act_save, None, self.act_print]),
-            ("tree-toolbar", "Tree Edit", [self.act_add_after, self.act_add_child, self.act_delete, None,
-                                           self.act_move_up, self.act_move_down, self.act_move_left,
-                                           self.act_move_right]),
-            ("article-toolbar", "Article Edit", [self.act_undo, self.act_redo, None, self.act_cut,
-                                                 self.act_copy, self.act_paste, None, self.act_bold,
-                                                 self.act_italic]),
-            ("view-toolbar", "View", [self.act_focus, self.act_unfocus, self.act_word_wrap]),
-            ("navigate-toolbar", "Navigate", [self.act_find, self.act_prev_sibling, self.act_next_sibling,
-                                              self.act_follow_link]),
+            ("file-bar", "File", [self.act_new, self.act_open, self.act_save, self.act_print, None,
+                                  self.act_options]),
+            ("article-edit-bar", "Article Edit", [self.act_cut, self.act_copy, self.act_paste,
+                                                  self.act_delete_text]),
+            ("tree-edit-bar", "Tree Edit", [self.act_add_child, self.act_add_before, self.act_add_after,
+                                            self.act_delete, self.act_rename]),
+            ("view-bar", "View", [self.act_find, self.act_search_tree, None,
+                                  self.act_view_modes["both"], self.act_view_modes["tree"],
+                                  self.act_view_modes["article"], None, self.act_word_wrap]),
+            ("navigate-bar", "Navigate", [self.act_follow_link, None, self.act_move_up, self.act_move_down,
+                                          self.act_move_left, self.act_move_right, None,
+                                          self.act_expand_branch, self.act_collapse_branch]),
+            ("extras-bar", "Extras", [self.act_undo, self.act_redo, None, self.act_bold, self.act_italic,
+                                      None, self.act_focus, self.act_unfocus]),
         ]
         self.toolbars = {}
         sub = self.view_menu.addMenu("Tool&bars")
@@ -687,8 +760,104 @@ class MainWindow(QMainWindow):
                     tb.addAction(a)
             self.toolbars[name] = tb
             sub.addAction(tb.toggleViewAction())
-        for name in ("view-toolbar", "article-toolbar"):
-            self.toolbars[name].hide()   # off until turned on in View > Toolbars
+        sub.addSeparator()
+        sizes = sub.addMenu("&Icon Size")
+        self.icon_size_group = QActionGroup(self)
+        self.act_icon_sizes = {}
+        for label, px in TOOLBAR_ICON_SIZES.items():
+            act = QAction(f"{label} ({px} px)", self, checkable=True)
+            act.triggered.connect(lambda _c=False, n=px: self.set_toolbar_icon_size(n))
+            self.icon_size_group.addAction(act)
+            sizes.addAction(act)
+            self.act_icon_sizes[px] = act
+        self.set_toolbar_icon_size(DEFAULT_TOOLBAR_ICON_SIZE, remember=False)
+        labels = sub.addMenu("Button &Labels")
+        self.toolbar_label_group = QActionGroup(self)
+        self.act_toolbar_labels = {}
+        for key, (label, _style) in TOOLBAR_LABELS.items():
+            act = QAction(label, self, checkable=True)
+            act.triggered.connect(lambda _c=False, k=key: self.set_toolbar_labels(k))
+            self.toolbar_label_group.addAction(act)
+            labels.addAction(act)
+            self.act_toolbar_labels[key] = act
+        self._set_short_labels()
+        self.set_toolbar_labels("icons", remember=False)
+        sub.addSeparator()
+        sub.addAction(self._action("Show &All", lambda: self._show_toolbars(True)))
+        sub.addAction(self._action("&Hide All", lambda: self._show_toolbars(False)))
+        button = self.toolbars["file-bar"].widgetForAction(self.act_options)
+        if isinstance(button, QToolButton):
+            button.setPopupMode(QToolButton.InstantPopup)
+        self.toolbars["extras-bar"].hide()   # Twigpad's own; off until turned on
+
+    def set_toolbar_icon_size(self, px: int, remember: bool = True) -> None:
+        if px not in self.act_icon_sizes:
+            px = DEFAULT_TOOLBAR_ICON_SIZE
+        self.act_icon_sizes[px].setChecked(True)
+        for tb in self.toolbars.values():
+            tb.setIconSize(QSize(px, px))
+        if remember:
+            self.settings.setValue("view/toolbar_icon_size", px)
+            self.arrange_toolbars()
+
+    def set_toolbar_labels(self, key: str, remember: bool = True) -> None:
+        """Icons only, or with their names beside or under them."""
+        if key not in TOOLBAR_LABELS:
+            key = "icons"
+        self.act_toolbar_labels[key].setChecked(True)
+        for tb in self.toolbars.values():
+            tb.setToolButtonStyle(TOOLBAR_LABELS[key][1])
+        if remember:
+            self.settings.setValue("view/toolbar_labels", key)
+            self.arrange_toolbars()
+
+    def arrange_toolbars(self) -> None:
+        """Put the top toolbars on as many rows as they need, in their usual
+        order, so no button is hidden behind an overflow arrow."""
+        bars = [tb for tb in self.toolbars.values()
+                if self.toolBarArea(tb) == Qt.TopToolBarArea and not tb.isHidden()]
+        for tb in bars:
+            self.removeToolBarBreak(tb)
+            self.removeToolBar(tb)
+        room = max(400, self.width() - 8)
+        used = 0
+        for tb in bars:
+            need = tb.sizeHint().width()
+            if used and used + need > room:
+                self.addToolBarBreak(Qt.TopToolBarArea)
+                used = 0
+            self.addToolBar(Qt.TopToolBarArea, tb)
+            tb.show()
+            used += need
+
+    def _set_short_labels(self) -> None:
+        """Short names for buttons with labels; the tooltips keep the full names."""
+        short = {
+            self.act_new: "New", self.act_open: "Open", self.act_save: "Save", self.act_print: "Print",
+            self.act_options: "Options", self.act_cut: "Cut", self.act_copy: "Copy", self.act_paste: "Paste",
+            self.act_delete_text: "Delete", self.act_add_child: "Child", self.act_add_before: "Before",
+            self.act_add_after: "After", self.act_delete: "Remove", self.act_rename: "Rename",
+            self.act_find: "Find", self.act_search_tree: "Search", self.act_view_modes["both"]: "Both",
+            self.act_view_modes["tree"]: "Tree", self.act_view_modes["article"]: "Article",
+            self.act_word_wrap: "Wrap", self.act_follow_link: "Link", self.act_move_up: "Up",
+            self.act_move_down: "Down", self.act_move_left: "Left", self.act_move_right: "Right",
+            self.act_expand_branch: "Expand", self.act_collapse_branch: "Collapse", self.act_undo: "Undo",
+            self.act_redo: "Redo", self.act_bold: "Bold", self.act_italic: "Italic", self.act_focus: "Focus",
+            self.act_unfocus: "Whole Tree",
+        }
+        for act, text in short.items():
+            tip = act.toolTip()
+            act.setIconText(text)
+            act.setToolTip(tip)
+
+    def _show_toolbars(self, on: bool) -> None:
+        for tb in self.toolbars.values():
+            tb.setVisible(on)
+
+    def _show_options_menu(self) -> None:
+        button = self.toolbars["file-bar"].widgetForAction(self.act_options)
+        if button is not None and button.isVisible():
+            self.options_menu.popup(button.mapToGlobal(button.rect().bottomLeft()))
 
     def _create_statusbar(self) -> None:
         sb = self.statusBar()
@@ -727,12 +896,8 @@ class MainWindow(QMainWindow):
         self.tree.set_classic(self.act_classic_tree.isChecked())
         mode = s.value("view/mode", "both", type=str)
         self.set_view_mode(mode if mode in VIEW_MODES else "both")
-        for key, widget in (("fonts/editor", self.editor), ("fonts/tree", self.tree)):
-            desc = s.value(key, "", type=str)
-            font = QFont()
-            if desc and font.fromString(desc):
-                widget.setFont(font)
-        self._update_tab_width()
+        self.apply_text_sizes()
+        self.set_tree_icon_size(s.value("view/tree_icon_size", 16, type=int), remember=False)
         startup = s.value("options/startup", "", type=str)
         if startup not in STARTUP_MODES:   # older setting: a plain on/off
             startup = "reopen" if s.value("options/open_last", True, type=bool) else "new"
@@ -745,7 +910,14 @@ class MainWindow(QMainWindow):
         self.act_portable.blockSignals(True)
         self.act_portable.setChecked(self._using_portable())
         self.act_portable.blockSignals(False)
-        self.apply_pane_colors()
+        self.set_toolbar_icon_size(s.value("view/toolbar_icon_size", DEFAULT_TOOLBAR_ICON_SIZE, type=int),
+                                   remember=False)
+        self.set_toolbar_labels(s.value("view/toolbar_labels", "icons", type=str), remember=False)
+        name = s.value("view/theme", "auto", type=str)
+        name = name if name in theme.THEMES else "auto"
+        self.act_themes[name].setChecked(True)
+        theme.apply(name)
+        self._theme_changed()
         self.act_backup.setChecked(s.value("options/backup", True, type=bool))
         self.act_autosave.setChecked(s.value("options/autosave", False, type=bool))
         self.set_autosave(self.act_autosave.isChecked())
@@ -2041,8 +2213,7 @@ class MainWindow(QMainWindow):
 
     def set_password(self, password: Optional[str] = None) -> bool:
         if not twig.encryption_available():
-            QMessageBox.warning(self, APP_NAME, "Password protection needs the Python "
-                                "'cryptography' package (python3-cryptography).")
+            QMessageBox.warning(self, APP_NAME, f"Password protection needs {twig.MISSING_CRYPTO}.")
             return False
         if not self._writable():
             return False
@@ -2302,6 +2473,12 @@ class MainWindow(QMainWindow):
             self.editor.setFocus()
 
     def eventFilter(self, obj, event) -> bool:
+        if (event.type() == QEvent.Wheel and event.modifiers() & Qt.ControlModifier
+                and obj in (self.editor.viewport(), self.tree.viewport())):
+            delta = event.angleDelta().y()
+            if delta:
+                self.zoom_text("tree" if obj is self.tree.viewport() else "editor", 1 if delta > 0 else -1)
+            return True
         if event.type() == QEvent.KeyPress and obj in (self.editor, self.tree):
             key, mods = event.key(), event.modifiers()
             if key == Qt.Key_F10 and mods == Qt.ShiftModifier:
@@ -2345,20 +2522,60 @@ class MainWindow(QMainWindow):
     def _update_tab_width(self) -> None:
         self.editor.setTabStopDistance(4 * self.editor.fontMetrics().horizontalAdvance(" "))
 
+    def _base_font(self, which: str) -> QFont:
+        """The font chosen in View > Article/Tree Font, before any zoom."""
+        desc = self.settings.value(f"fonts/{which}", "", type=str)
+        font = QFont()
+        if desc and font.fromString(desc):
+            return font
+        return QFont(QApplication.font())
+
+    def text_zoom(self, which: str) -> int:
+        return self.settings.value(f"view/{which}_zoom", 0, type=int)
+
+    def apply_text_sizes(self) -> None:
+        for which, widget in (("editor", self.editor), ("tree", self.tree)):
+            font = self._base_font(which)
+            size = font.pointSizeF() if font.pointSizeF() > 0 else 10.0
+            font.setPointSizeF(max(5.0, size + self.text_zoom(which)))
+            widget.setFont(font)
+        self._update_tab_width()
+        self.tree.scheduleDelayedItemsLayout()
+
+    def _zoom_target(self) -> str:
+        return "tree" if self.tree.hasFocus() else "editor"
+
+    def zoom_text(self, which: str, step: int) -> None:
+        """Larger (+1), smaller (-1) or normal (0) text in the tree or the article."""
+        zoom = 0 if step == 0 else min(ZOOM_RANGE[1], max(ZOOM_RANGE[0], self.text_zoom(which) + step))
+        self.settings.setValue(f"view/{which}_zoom", zoom)
+        self.apply_text_sizes()
+        pane = "Tree" if which == "tree" else "Article"
+        size = (self.tree if which == "tree" else self.editor).font().pointSizeF()
+        self.statusBar().showMessage(f"{pane} text size: {size:g} pt", 2000)
+
+    def set_tree_icon_size(self, px: int, remember: bool = True) -> None:
+        if px not in self.act_tree_icon_sizes:
+            px = 16
+        self.act_tree_icon_sizes[px].setChecked(True)
+        self.tree.set_icon_px(px)
+        if remember:
+            self.settings.setValue("view/tree_icon_size", px)
+
     def choose_font(self, which: str) -> None:
         widget = self.editor if which == "editor" else self.tree
-        font, ok = QFontDialog.getFont(widget.font(), self,
+        font, ok = QFontDialog.getFont(self._base_font(which), self,
                                        "Article Font" if which == "editor" else "Tree Font")
         if ok:
-            widget.setFont(font)
             self.settings.setValue(f"fonts/{which}", font.toString())
-            self._update_tab_width()
+            self.settings.remove(f"view/{which}_zoom")   # the chosen size, as chosen
+            self.apply_text_sizes()
 
     def reset_fonts(self) -> None:
-        for which, widget in (("editor", self.editor), ("tree", self.tree)):
-            widget.setFont(QApplication.font())
+        for which in ("editor", "tree"):
             self.settings.remove(f"fonts/{which}")
-        self._update_tab_width()
+            self.settings.remove(f"view/{which}_zoom")
+        self.apply_text_sizes()
 
     # =============================================================== search
 
@@ -2370,10 +2587,22 @@ class MainWindow(QMainWindow):
     def show_find(self, replace: bool = False, scope: Optional[int] = None) -> None:
         self.find_dialog().show_dialog(replace, scope)
 
+    def tree_search_dialog(self) -> TreeSearchDialog:
+        if self._tree_search is None:
+            self._tree_search = TreeSearchDialog(self)
+        return self._tree_search
+
+    def search_tree(self) -> None:
+        """The Tree Search window: every node whose title or article matches."""
+        self.tree_search_dialog().show_dialog()
+
     def find_here(self) -> None:
         """Ctrl+F in the article searches this article; in the tree, the whole tree."""
-        from .finddialog import SCOPE_ALL, SCOPE_NODE
-        self.show_find(False, SCOPE_NODE if self.editor.hasFocus() else SCOPE_ALL)
+        from .finddialog import SCOPE_NODE
+        if self.editor.hasFocus():
+            self.show_find(False, SCOPE_NODE)
+        else:
+            self.search_tree()
 
     def find_again(self, backward: bool = False) -> None:
         dlg = self.find_dialog()
@@ -2412,6 +2641,8 @@ class MainWindow(QMainWindow):
         self._backed_up_path = None
         if self._find_dialog is not None:
             self._find_dialog.last_match = None
+        if self._tree_search is not None:
+            self._tree_search.clear()
         self.tree.setFocus()
 
     def maybe_save(self) -> bool:
@@ -2902,14 +3133,192 @@ class MainWindow(QMainWindow):
 
     # ================================================================ misc
 
-    def about(self) -> None:
+    # ======================================================= theme
+
+    def set_theme(self, name: str) -> None:
+        """Light, dark, automatic (follows the desktop) or the desktop's own style."""
+        self.act_themes[name].setChecked(True)
+        self.settings.setValue("view/theme", name)
+        theme.apply(name)
+        for widget in QApplication.topLevelWidgets():
+            if isinstance(widget, MainWindow):
+                widget.act_themes[name].setChecked(True)
+                widget._theme_changed()
+
+    def _theme_changed(self) -> None:
+        self.apply_pane_colors()
+        self._set_drawn_icons()
+        self.link_highlighter.refresh_colors()
+        self.tree.viewport().update()
+
+    def _toolbar_icon_names(self) -> dict:
+        return {
+            self.act_new: "new", self.act_open: "open", self.act_save: "save", self.act_print: "print",
+            self.act_options: "options",
+            self.act_cut: "cut", self.act_copy: "copy", self.act_paste: "paste",
+            self.act_delete_text: "delete-text",
+            self.act_add_child: "node-child", self.act_add_before: "node-before",
+            self.act_add_after: "node-after", self.act_delete: "node-delete", self.act_rename: "rename",
+            self.act_find: "find", self.act_search_tree: "search-tree",
+            self.act_view_modes["both"]: "view-both", self.act_view_modes["tree"]: "view-tree",
+            self.act_view_modes["article"]: "view-article", self.act_word_wrap: "word-wrap",
+            self.act_follow_link: "link", self.act_move_up: "move-up", self.act_move_down: "move-down",
+            self.act_move_left: "move-left", self.act_move_right: "move-right",
+            self.act_expand_branch: "expand", self.act_collapse_branch: "collapse",
+            self.act_undo: "undo", self.act_redo: "redo", self.act_bold: "bold", self.act_italic: "italic",
+            self.act_focus: "focus", self.act_unfocus: "unfocus",
+            self.act_report_bug: "bug",
+        }
+
+    def _set_drawn_icons(self) -> None:
+        """Toolbar icons are drawn in the theme's colours, so redraw them after
+        a theme change."""
+        if iconset.available():
+            for act, name in self._toolbar_icon_names().items():
+                act.setIcon(iconset.icon(name))
+            return
+        # Without Qt's SVG module: the simpler drawn icons and desktop icons.
+        self.act_add_child.setIcon(icons.node_child())
+        self.act_add_before.setIcon(icons.node_before())
+        self.act_add_after.setIcon(icons.node_after())
+        self.act_delete.setIcon(icons.node_delete())
+        self.act_rename.setIcon(icons.node_rename())
+        self.act_delete_text.setIcon(icons.cross())
+        for mode, make in (("both", icons.view_both), ("tree", icons.view_tree), ("article", icons.view_article)):
+            self.act_view_modes[mode].setIcon(make())
+        for act, make in ((self.act_move_up, icons.move_up), (self.act_move_down, icons.move_down),
+                          (self.act_move_left, icons.move_left), (self.act_move_right, icons.move_right)):
+            act.setIcon(make())
+        self.act_expand_branch.setIcon(icons.expand_branch())
+        self.act_collapse_branch.setIcon(icons.collapse_branch())
+        self.act_cut.setIcon(icons.themed_drawn("edit-cut", icons.cut))
+        self.act_copy.setIcon(icons.themed_drawn("edit-copy", icons.copy))
+        self.act_paste.setIcon(icons.themed_drawn("edit-paste", icons.paste))
+        self.act_bold.setIcon(icons.themed_drawn("format-text-bold", icons.bold))
+        self.act_italic.setIcon(icons.themed_drawn("format-text-italic", icons.italic))
+
+    # ======================================================= about
+
+    def open_web(self, url: str) -> bool:
+        ok = QDesktopServices.openUrl(QUrl(url))
+        if not ok:
+            self.statusBar().showMessage(f"Couldn't open {url}", 8000)
+        return ok
+
+    def _link_label(self, html: str, wrap: bool = True) -> QLabel:
+        label = QLabel(html)
+        label.setWordWrap(wrap)
+        label.setTextFormat(Qt.RichText)
+        label.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        label.setOpenExternalLinks(False)
+        label.linkActivated.connect(self.open_web)
+        return label
+
+    def _about_dialog(self) -> QDialog:
+        import html
+        import platform
         from PyQt5.QtCore import QT_VERSION_STR
-        QMessageBox.about(
-            self, f"About {APP_NAME}",
-            f"<h3>{APP_NAME} {__version__}</h3>"
-            "<p>A two-pane tree notes editor.</p>"
-            "<p>Opens and saves .hjt tree notes files, including backup copies.</p>"
-            f"<p><small>Qt {QT_VERSION_STR}</small></p>")
+        from PyQt5.QtWidgets import QHBoxLayout, QPushButton
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"About {APP_NAME}")
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(24, 22, 24, 16)
+        lay.setSpacing(12)
+        head = QHBoxLayout()
+        logo = QLabel()
+        logo.setPixmap(icons.app_icon().pixmap(72, 72))
+        head.addWidget(logo, 0, Qt.AlignTop)
+        sub = theme.mix(self.palette().color(QPalette.Window), self.palette().color(QPalette.WindowText), 0.65)
+        title = QLabel(f"<div style='font-size:20pt; font-weight:600'>{APP_NAME}</div>"
+                       f"<div style='color:{sub.name()}'>Version {__version__}</div>"
+                       "<div style='margin-top:6px'>Organize notes, ideas and knowledge in a tree.</div>")
+        title.setWordWrap(False)
+        head.addWidget(title, 1)
+        lay.addLayout(head)
+        lay.addWidget(self._link_label(
+            f"Made by <a href='{developer.DEVELOPER_URL}'>{developer.DEVELOPER}</a> at "
+            f"<a href='{developer.WEBSITE}'>{developer.COMPANY}</a>."))
+        lay.addWidget(self._link_label(
+            f"{APP_NAME} is free software (GPL 3.0 or later). If it is useful to you, please "
+            "consider supporting its development, and have a look at my other apps."))
+        lay.addWidget(self._link_label(
+            f"Found a problem? <a href='{html.escape(self.bug_report_url())}'>Report a bug on GitHub</a>."))
+        small = QLabel(f"<span style='color:{sub.name()}'>Qt {QT_VERSION_STR} · "
+                       f"Python {platform.python_version()}</span>")
+        lay.addWidget(small)
+        row = QHBoxLayout()
+        donate = QPushButton(treestyle.note_icon("heart"), " Support the Developer")
+        donate.setObjectName("accent")
+        donate.clicked.connect(lambda: self.open_web(developer.DONATE_URL))
+        more = QPushButton("More Apps")
+        more.clicked.connect(self.show_more_apps)
+        close = QPushButton("Close")
+        close.setDefault(True)
+        close.clicked.connect(dlg.accept)
+        row.addWidget(donate)
+        row.addWidget(more)
+        row.addStretch(1)
+        row.addWidget(close)
+        lay.addLayout(row)
+        dlg.setMinimumWidth(520)
+        return dlg
+
+    def bug_report_url(self) -> str:
+        from PyQt5.QtCore import PYQT_VERSION_STR, qVersion
+        return developer.bug_report_url(developer.system_info(__version__, qVersion(), PYQT_VERSION_STR))
+
+    def report_bug(self) -> None:
+        """Open a new GitHub issue with the versions filled in; the user writes the rest."""
+        self.open_web(self.bug_report_url())
+        self.statusBar().showMessage("Opened a new bug report in your web browser", 5000)
+
+    def about(self) -> None:
+        self._about_dialog().exec_()
+
+    def _more_apps_dialog(self) -> QDialog:
+        from PyQt5.QtWidgets import QFrame, QHBoxLayout, QPushButton
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"More Apps by {developer.COMPANY}")
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(20, 18, 20, 14)
+        lay.setSpacing(8)
+        lay.addWidget(QLabel(f"<div style='font-size:13pt; font-weight:600'>More apps for Linux "
+                             f"from the developer of {APP_NAME}</div>"))
+        pal = self.palette()
+        sub = theme.mix(pal.color(QPalette.Window), pal.color(QPalette.WindowText), 0.65).name()
+        line = theme.mix(pal.color(QPalette.Window), pal.color(QPalette.WindowText), 0.15).name()
+        for app in developer.OTHER_APPS:
+            card = QFrame()
+            card.setObjectName("app-card")
+            card.setStyleSheet(f"QFrame#app-card {{ border: 1px solid {line}; border-radius: 8px; }}")
+            row = QHBoxLayout(card)
+            row.setContentsMargins(10, 8, 12, 8)
+            row.setSpacing(12)
+            logo = QLabel()
+            logo.setFixedSize(44, 44)
+            logo.setPixmap(icons.other_app_icon(app.icon).pixmap(44, 44))
+            row.addWidget(logo, 0, Qt.AlignVCenter)
+            row.addWidget(self._link_label(
+                f"<b>{app.name}</b><br><span style='color:{sub}'>{app.summary}</span>", wrap=False), 1)
+            btn = QPushButton("Learn More")
+            btn.clicked.connect(lambda _c=False, url=app.url: self.open_web(url))
+            row.addWidget(btn, 0, Qt.AlignVCenter)
+            lay.addWidget(card)
+        bottom = QHBoxLayout()
+        bottom.addWidget(self._link_label(f"<a href='{developer.ALL_APPS_URL}'>See all apps</a> · "
+                                          f"<a href='{developer.DONATE_URL}'>Support the developer</a>",
+                                          wrap=False))
+        bottom.addStretch(1)
+        close = QPushButton("Close")
+        close.setDefault(True)
+        close.clicked.connect(dlg.accept)
+        bottom.addWidget(close)
+        lay.addLayout(bottom)
+        dlg.setMinimumWidth(560)
+        return dlg
+
+    def show_more_apps(self) -> None:
+        self._more_apps_dialog().exec_()
 
     def _ok_to_close(self) -> bool:
         mode = next((m for m, a in self.act_close_modes.items() if a.isChecked()), "ask")
@@ -2928,6 +3337,8 @@ class MainWindow(QMainWindow):
             self._save_settings()
             if self._find_dialog is not None:
                 self._find_dialog.close()
+            if self._tree_search is not None:
+                self._tree_search.close()
             event.accept()
         else:
             event.ignore()

@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- AppStream metadata: what software centres show about the app. -->
 <component type="desktop-application">
-  <id>io.github.rishabh3354.Twigpad</id>
+  <id>com.warlordsoftwares.twigpad</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <name>Twigpad</name>
   <summary>Organize notes, ideas and knowledge in a tree</summary>
-  <developer id="io.github.rishabh3354">
-    <name>rishabh3354</name>
+  <developer id="com.warlordsoftwares">
+    <name>Rishabh Bhardwaj</name>
   </developer>
 
   <description>
@@ -28,7 +28,7 @@
     </ul>
   </description>
 
-  <launchable type="desktop-id">io.github.rishabh3354.Twigpad.desktop</launchable>
+  <launchable type="desktop-id">com.warlordsoftwares.twigpad.desktop</launchable>
   <provides>
     <binary>twigpad</binary>
     <mediatype>application/x-hjt</mediatype>
@@ -38,6 +38,8 @@
   <url type="homepage">https://github.com/rishabh3354/twigpad</url>
   <url type="bugtracker">https://github.com/rishabh3354/twigpad/issues</url>
   <url type="vcs-browser">https://github.com/rishabh3354/twigpad</url>
+  <url type="donation">https://paypal.me/TechRishabh/10</url>
+  <url type="contact">https://warlordsoftwares.com/rishabh-bhardwaj/</url>
 
   <categories>
     <category>Office</category>

@@ -15,14 +15,24 @@ class ArticleHighlighter(QSyntaxHighlighter):
     def __init__(self, document):
         super().__init__(document)
         self.fmt = QTextCharFormat()
-        self.fmt.setForeground(QApplication.palette().color(QPalette.Link))
         self.fmt.setFontUnderline(True)
         self.tag_fmt = QTextCharFormat()
-        self.tag_fmt.setForeground(QColor("#2a8a63"))
         self.spell_fmt = QTextCharFormat()
         self.spell_fmt.setUnderlineStyle(QTextCharFormat.SpellCheckUnderline)
-        self.spell_fmt.setUnderlineColor(QColor("#d02020"))
         self.speller: Optional[spell.Speller] = None
+        self._set_colors()
+
+    def _set_colors(self) -> None:
+        pal = QApplication.palette()
+        dark = pal.color(QPalette.Base).lightness() < 128
+        self.fmt.setForeground(pal.color(QPalette.Link))
+        self.tag_fmt.setForeground(QColor("#5cc99a" if dark else "#2a8a63"))
+        self.spell_fmt.setUnderlineColor(QColor("#ff6b6b" if dark else "#d02020"))
+
+    def refresh_colors(self) -> None:
+        """After a theme change."""
+        self._set_colors()
+        self.rehighlight()
 
     def set_speller(self, speller: Optional[spell.Speller]) -> None:
         self.speller = speller

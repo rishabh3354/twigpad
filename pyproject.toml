@@ -10,7 +10,7 @@ readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
 authors = [{ name = "Twigpad contributors" }]
 requires-python = ">=3.8"
-dependencies = ["PyQt5>=5.15", "cryptography>=3.4"]
+dependencies = ["PyQt5>=5.15", "pycryptodome>=3.10"]
 keywords = ["notes", "outliner", "notebook", "hierarchical", "tree", "hjt", "knowledge base", "pim"]
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -41,7 +41,7 @@ version = { attr = "twigpad.__version__" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-twigpad = ["resources/*.svg"]
+twigpad = ["resources/*.svg", "resources/apps/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

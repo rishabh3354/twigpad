@@ -3,5 +3,5 @@
 
 APP_NAME = "Twigpad"
 APP_ID = "twigpad"                            # command, package, settings folder
-DESKTOP_ID = "io.github.rishabh3354.Twigpad"   # desktop entry, icon and AppStream id
+DESKTOP_ID = "com.warlordsoftwares.twigpad"  # desktop entry, icon and AppStream id
 __version__ = "0.1.0"

@@ -172,13 +172,37 @@ Debian and Ubuntu or `hunspell-de` on Fedora.
 - **Expand / Collapse Selected Node** opens or closes one branch, one level or
   all levels deep; **Expand All** and **Collapse All** do the whole tree.
 - Word wrap, and separate fonts for the tree and the article.
+- **Text Size**: **Ctrl+=** (or Ctrl++) makes the text larger and **Ctrl+-**
+  smaller in the pane you are in; **Ctrl+0** goes back to the normal size.
+  **Ctrl+mouse wheel** over the tree or the article does the same for that
+  pane. The menu also has separate items for the tree and the article.
+  Text that has its own size in a formatted note keeps that size.
+- **Tree Icon Size**: Small (the default), Medium, Large or Extra Large note
+  icons in the tree; the rows and indentation grow with them.
 - **Classic Tree Look** switches between the classic tree (folder icons,
   dotted lines, +/- boxes) and your desktop's standard tree style.
+- **Theme**: **Light**, **Dark**, **Automatic** (light or dark, following your
+  desktop's setting; the default) or **Desktop Style** (your desktop's own
+  look and colours).
 - **Colours** sets the background and text colours of the tree and the
   article; **Restore Defaults** goes back to your desktop's colours.
-- **Toolbars**: File, Tree Edit, Article Edit, View and Navigate. Turn each
-  on or off here, and drag a toolbar by its handle to move it, also to
-  another side of the window. Twigpad remembers where they are.
+- **Toolbars**: the classic five, in this order:
+
+  | Toolbar | Buttons |
+  |---|---|
+  | File | New, Open, Save, Print, Options (opens the Options menu) |
+  | Article Edit | Cut, Copy, Paste, Delete |
+  | Tree Edit | Insert child node, insert node before, insert node after, delete node, rename node |
+  | View | Find, Search Tree, Tree and Article / Tree Only / Article Only, Word Wrap |
+  | Navigate | Follow Link, move node up / down / left / right, expand / collapse the selected branch |
+
+  An **Extras** toolbar (undo, redo, bold, italic, focus) is off at first.
+  **Icon Size** makes the toolbar icons Small, Medium, Large (the default) or
+  Extra Large, and **Button Labels** shows each button's name beside or under
+  its icon. When the toolbars no longer fit, they wrap onto more rows.
+  Turn toolbars on or off here (or **Show All** / **Hide All**), or
+  right-click the toolbar area. Drag a toolbar by its handle to move it, also
+  to another side of the window. Twigpad remembers where they are.
 
 ## Links
 
@@ -204,11 +228,27 @@ brackets, select the whole link first, or put it in double quotes.
 | Key | Action |
 |---|---|
 | Ctrl+F or Shift+F12 | Find |
+| Shift+F11 | Search Tree (the whole tree, from anywhere) |
 | Ctrl+R | Find and replace |
 | F3 / Shift+F3 | Find next / previous |
 
-**Ctrl+F** in the article searches the selected node; in the tree it searches
-the whole file (you can change this in the Find window). Search looks in node
+**Ctrl+F** in the article searches the selected node. In the tree, Ctrl+F (or
+**Search → Search Tree**, Shift+F11) opens the **Tree Search** window:
+
+- Type the search text and press Enter or **Find**. Case does not matter.
+- **What to search**: the **Total tree** or the **Subtree** of the selected
+  node, in node titles (**Nodes**), **Articles**, or both.
+- The results list every matching node with its number, title, where the
+  text was found (**Node**, **Article** or **Article+Node**) and its path.
+  **Maximum number of rows** limits the list (200 at first).
+- Double-click a result, or press Enter, to select that node; the first match
+  in its article is selected too. With **Hide search window after item is
+  double clicked** on, the window then closes.
+- **Search Article** selects the next match in the result's article each time
+  you press it.
+
+**Search → Find** (in the article) and **Replace** open the Find and Replace
+window, which also has match case, whole words and regular expressions. Search looks in node
 titles, articles, or both; in all nodes, the selected
 branch, or the selected node only. Options: match case, whole words, regular
 expressions. **Find All** lists every match; click one to jump to it.
@@ -264,6 +304,17 @@ the Program**, or create an empty file called `twigpad.ini` next to the
 AppImage (or the `twigpad` program). Twigpad then keeps its settings in that
 file instead of your home folder. Turning the option off moves the settings
 back and deletes the file.
+
+## Help menu
+
+- **Report a Bug** opens a new issue on Twigpad's GitHub page in your web
+  browser. The form already lists your Twigpad, Qt, Python and Linux versions;
+  describe what went wrong and submit it (you need a GitHub account). Nothing
+  is sent until you submit it yourself.
+- **Support the Developer (Donate)** opens a PayPal page to support Twigpad.
+- **More Apps by Warlord Softwares** lists other Linux apps by the same developer.
+- **About the Developer** opens the developer's web page.
+- **About Twigpad** shows the version, with the same links.
 
 ## Command line
 

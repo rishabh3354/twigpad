@@ -62,8 +62,14 @@ All notable changes to Twigpad are listed here. The format follows
   headings, lists, alignment, tables, horizontal lines and pictures
   (inserted or pasted). Exported to HTML and printed with their formatting.
 - Note icons and colours (Node → Icon and Colour).
-- Password protection: File → Set Password encrypts the file (AES-256-GCM,
-  key from scrypt).
+- Password protection: File → Set Password encrypts the file (AES-256-GCM
+  with PyCryptodome, key from scrypt).
+- View → Theme: polished Light and Dark themes, Automatic (follows the
+  desktop's light or dark setting, the default) and Desktop Style.
+- Help → Report a Bug opens a new GitHub issue with the app and system
+  versions filled in; the About window links to it too.
+- Help → Support the Developer (Donate), More Apps by Warlord Softwares and
+  About the Developer; a new About window with the same links.
 - View → Colours: background and text colours for the tree and the article.
 - Options → At Startup (reopen the last file, ask, Quick Start window, or a
   new file) and When Closing With Unsaved Changes (ask, save, don't save).
@@ -73,8 +79,26 @@ All notable changes to Twigpad are listed here. The format follows
 - Cut and Copy take the whole article when nothing is selected; Edit → Delete
   clears the whole article after asking.
 - File → Import → Text File into Article (Replace Its Text).
-- Five movable toolbars (File, Tree Edit, Article Edit, View, Navigate),
-  shown or hidden in View → Toolbars.
+- The classic five movable toolbars, in the classic order and with the
+  classic buttons: File (with an Options button), Article Edit, Tree Edit,
+  View (Find, Search Tree, view modes, Word Wrap) and Navigate (Follow Link,
+  move node, expand/collapse branch), plus an optional Extras toolbar.
+- Modern toolbar icons: one consistent set of rounded outline icons with
+  accent colours, drawn by Twigpad so they look the same on every desktop and
+  follow the light and dark themes.
+- Flat, modern folder icons in the tree.
+- A refreshed, more modern app logo.
+- Larger toolbar icons (24 px) by default; View → Toolbars → Icon Size
+  offers Small, Medium, Large and Extra Large, and Button Labels shows the
+  names beside or under the icons. Toolbars wrap onto more rows when needed.
+- View → Text Size for the tree and the article (Ctrl+=, Ctrl+-, Ctrl+0 and
+  Ctrl+mouse wheel), and View → Tree Icon Size.
+- The More Apps window shows each app's own icon.
+- Tree Search window (Ctrl+F in the tree, or Search → Search Tree, Shift+F11):
+  search the total tree or a subtree, in titles and/or articles, with a
+  numbered results list showing where each match is (Node, Article or
+  Article+Node) and the node's path; double-click or Enter selects the node,
+  and Search Article steps through the matches in its article.
 - Shift+drop onto a node puts the dragged node below it; a slow second click
   renames a node; Ctrl+Up/Down scroll the tree; Shift+F10 opens the
   right-click menu; Find and Go to Start/End in the article's right-click
@@ -88,3 +112,7 @@ All notable changes to Twigpad are listed here. The format follows
 - Ctrl+F searches the selected node when pressed in the article, and the whole
   file when pressed in the tree.
 - One fixed toolbar became five movable ones; Cut and Copy are always enabled.
+- The desktop entry, icon and AppStream id are now `com.warlordsoftwares.twigpad`.
+
+### Fixed
+- The box for renaming a node in the tree no longer cuts off the bottom of the title.

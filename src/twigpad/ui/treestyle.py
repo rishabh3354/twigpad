@@ -7,21 +7,19 @@ from typing import Optional
 
 from PyQt5.QtCore import QPointF, QRect, QRectF, QSize, Qt
 from PyQt5.QtGui import QColor, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap
-from PyQt5.QtWidgets import QStyle, QStyledItemDelegate, QStyleOptionViewItem
+from PyQt5.QtWidgets import QLineEdit, QStyle, QStyledItemDelegate, QStyleOptionViewItem
 
 ICON = 16          # folder icon size (logical pixels)
 GAP = 3            # space between connector line, icon and text
 TEXT_PAD = 3       # horizontal padding inside the title highlight
 INDENT = 19        # width of one tree level
-LINE_COLOR = QColor("#9a9a9a")
-BOX_BORDER = QColor("#8a8a8a")
-BOX_SIGN = QColor("#202020")
 
 _folder: Optional[QIcon] = None
+FOLDER_COLOR = "#f7bd46"
 
 # Note icons: name -> (menu label, default colour).
 NOTE_ICONS = {
-    "": ("Folder", "#e9b93c"),
+    "": ("Folder", FOLDER_COLOR),
     "page": ("Page", "#5b6b7f"),
     "star": ("Star", "#f2b01e"),
     "flag": ("Flag", "#d83b2d"),
@@ -41,45 +39,44 @@ _note_icons: dict = {}
 
 
 def _paint_folder(size: int, base: Optional[QColor] = None) -> QPixmap:
+    """A flat, modern folder: a darker back with its tab, and a lighter front
+    panel with rounded corners. ``base`` is the note colour, if it has one."""
     s = size / 16.0
     pm = QPixmap(size, size)
     pm.fill(Qt.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.Antialiasing)
     p.scale(s, s)
-    base = base or QColor("#e9b93c")
-    outline = QPen(base.darker(150), 1)
-    outline.setCosmetic(True)  # one device pixel at any size
+    p.setPen(Qt.NoPen)
+    if base is None or base == QColor(FOLDER_COLOR):
+        back, front, shine = QColor("#e39b22"), QColor("#f7bd46"), QColor("#fcd679")
+    else:
+        back, front, shine = base.darker(118), base.lighter(112), base.lighter(135)
 
     # back panel with the tab
-    back = QPainterPath()
-    back.moveTo(1.5, 3.5)
-    back.lineTo(6.0, 3.5)
-    back.lineTo(7.5, 5.0)
-    back.lineTo(14.5, 5.0)
-    back.lineTo(14.5, 13.5)
-    back.lineTo(1.5, 13.5)
-    back.closeSubpath()
-    p.setPen(outline)
-    p.setBrush(base)
-    p.drawPath(back)
+    tab = QPainterPath()
+    tab.moveTo(1.5, 4.2)
+    tab.quadTo(1.5, 2.5, 3.2, 2.5)
+    tab.lineTo(6.0, 2.5)
+    tab.quadTo(6.6, 2.5, 7.0, 2.9)
+    tab.lineTo(8.2, 4.0)
+    tab.lineTo(12.8, 4.0)
+    tab.quadTo(14.5, 4.0, 14.5, 5.7)
+    tab.lineTo(14.5, 11.8)
+    tab.lineTo(1.5, 11.8)
+    tab.closeSubpath()
+    p.setBrush(back)
+    p.drawPath(tab)
 
-    # front flap, slightly lighter, with a soft gradient
-    front = QPainterPath()
-    front.moveTo(1.5, 13.5)
-    front.lineTo(2.8, 7.0)
-    front.lineTo(15.5, 7.0)
-    front.lineTo(14.5, 13.5)
-    front.closeSubpath()
-    grad = QLinearGradient(0, 7, 0, 13.5)
-    if base == QColor("#e9b93c"):
-        grad.setColorAt(0.0, QColor("#fff0a8"))
-        grad.setColorAt(1.0, QColor("#f6cf55"))
-    else:
-        grad.setColorAt(0.0, base.lighter(165))
-        grad.setColorAt(1.0, base.lighter(125))
+    # front panel
+    front_path = QPainterPath()
+    front_path.addRoundedRect(QRectF(1.5, 5.6, 13.0, 8.4), 1.6, 1.6)
+    grad = QLinearGradient(0, 5.6, 0, 14)
+    grad.setColorAt(0.0, shine)
+    grad.setColorAt(0.25, front)
+    grad.setColorAt(1.0, front)
     p.setBrush(grad)
-    p.drawPath(front)
+    p.drawPath(front_path)
     p.end()
     return pm
 
@@ -88,7 +85,7 @@ def folder_icon() -> QIcon:
     global _folder
     if _folder is None:
         _folder = QIcon()
-        for size in (16, 24, 32, 48):
+        for size in (16, 20, 24, 32, 40, 48, 64):
             _folder.addPixmap(_paint_folder(size))
     return _folder
 
@@ -208,7 +205,7 @@ def note_icon(kind: str = "", color: str = "") -> QIcon:
     if icon is None:
         c = QColor(color) if color and QColor(color).isValid() else QColor(NOTE_ICONS[kind][1])
         icon = QIcon()
-        for size in (16, 24, 32, 48):
+        for size in (16, 20, 24, 32, 40, 48, 64):
             icon.addPixmap(_paint_folder(size, c) if not kind else _paint_glyph(kind, size, c))
         _note_icons[key] = icon
     return icon
@@ -223,7 +220,9 @@ def draw_branches(tree, painter: QPainter, rect: QRect, index) -> None:
         return
     indent = tree.indentation()
     cy = rect.top() + rect.height() // 2
-    pen = QPen(LINE_COLOR, 1)
+    from .theme import mix
+    base, text = tree.palette().color(QPalette.Base), tree.palette().color(QPalette.Text)
+    pen = QPen(mix(base, text, 0.45), 1)
     pen.setCosmetic(True)
     pen.setDashPattern([1, 1])
     painter.save()
@@ -276,10 +275,10 @@ def draw_branches(tree, painter: QPainter, rect: QRect, index) -> None:
     # +/- box for nodes with children.
     if item.childCount() > 0:
         box = QRect(cx - 4, cy - 4, 8, 8)
-        painter.setPen(QPen(BOX_BORDER, 1))
+        painter.setPen(QPen(mix(base, text, 0.5), 1))
         painter.setBrush(tree.palette().color(QPalette.Base))
         painter.drawRect(box)
-        painter.setPen(QPen(BOX_SIGN, 1))
+        painter.setPen(QPen(mix(base, text, 0.9), 1))
         painter.drawLine(cx - 2, cy, cx + 2, cy)
         if not item.isExpanded():
             painter.drawLine(cx, cy - 2, cx, cy + 2)
@@ -299,7 +298,7 @@ class TreeDelegate(QStyledItemDelegate):
     def _text_rect(self, option, text: str) -> QRect:
         r = option.rect
         fm = option.fontMetrics
-        x = r.left() + 1 + ICON + GAP
+        x = r.left() + 1 + self.tree.icon_px + GAP
         w = fm.horizontalAdvance(text) + 2 * TEXT_PAD
         h = fm.height() + 2
         return QRect(x, r.top() + (r.height() - h) // 2, w, h)
@@ -310,8 +309,9 @@ class TreeDelegate(QStyledItemDelegate):
         opt = QStyleOptionViewItem(option)
         self.initStyleOption(opt, index)
         fm = opt.fontMetrics
-        return QSize(1 + ICON + GAP + fm.horizontalAdvance(opt.text) + 2 * TEXT_PAD + 4,
-                     max(ICON + 2, fm.height() + 4))
+        icon = self.tree.icon_px
+        return QSize(1 + icon + GAP + fm.horizontalAdvance(opt.text) + 2 * TEXT_PAD + 4,
+                     max(icon + 4, fm.height() + 4))
 
     def paint(self, painter: QPainter, option, index) -> None:
         if not self.tree.classic:
@@ -321,7 +321,8 @@ class TreeDelegate(QStyledItemDelegate):
         self.initStyleOption(opt, index)
         r = opt.rect
         painter.save()
-        icon_rect = QRect(r.left() + 1, r.top() + (r.height() - ICON) // 2, ICON, ICON)
+        icon = self.tree.icon_px
+        icon_rect = QRect(r.left() + 1, r.top() + (r.height() - icon) // 2, icon, icon)
         item = self.tree.itemFromIndex(index)
         kind, color = getattr(item, "icon", ""), getattr(item, "color", "")
         note_icon(kind, color).paint(painter, icon_rect)
@@ -347,11 +348,25 @@ class TreeDelegate(QStyledItemDelegate):
             painter.drawRect(text_rect.adjusted(0, 0, -1, -1))
         painter.restore()
 
-    def updateEditorGeometry(self, editor, option, index) -> None:
-        if not self.tree.classic:
-            super().updateEditorGeometry(editor, option, index)
-            return
-        r = option.rect
-        x = r.left() + 1 + ICON + GAP
-        editor.setGeometry(QRect(x, r.top(), max(80, r.right() - x), r.height()))
+    def createEditor(self, parent, option, index):
+        editor = super().createEditor(parent, option, index)
+        if isinstance(editor, QLineEdit):
+            # Tree rows are compact: keep the rename box's padding small so the
+            # title is never clipped (the themes pad text boxes generously).
+            editor.setObjectName("node-title-editor")
+            editor.setStyleSheet("QLineEdit#node-title-editor { padding: 0px 3px; margin: 0px; "
+                                 "border-radius: 3px; }")
+        return editor
 
+    def updateEditorGeometry(self, editor, option, index) -> None:
+        r = option.rect
+        if self.tree.classic:
+            x = r.left() + 1 + self.tree.icon_px + GAP
+            width = max(80, r.right() - x)
+        else:
+            super().updateEditorGeometry(editor, option, index)
+            x, width = editor.x(), editor.width()
+        # At least as tall as the text needs, centred on the row.
+        h = max(r.height(), editor.sizeHint().height())
+        top = r.top() + (r.height() - h) // 2
+        editor.setGeometry(QRect(x, top, width, h))

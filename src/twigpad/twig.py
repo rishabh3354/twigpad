@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib
 import json
 import os
 import re
@@ -45,12 +46,21 @@ _COLOR = re.compile(r"#[0-9a-fA-F]{6}")
 # scrypt settings: about 0.1 s and 32 MB per attempt on a typical computer.
 SCRYPT_N, SCRYPT_R, SCRYPT_P = 2 ** 15, 8, 1
 
-try:
-    from cryptography.exceptions import InvalidTag
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-except ImportError:  # pragma: no cover - depends on the system
-    AESGCM = None
-    InvalidTag = Exception
+# PyCryptodome: "Crypto" when installed with pip, "Cryptodome" from the
+# Debian/Ubuntu package python3-pycryptodome. The old PyCrypto package also
+# installs as "Crypto" but has no GCM mode, so it is not used.
+AES = None
+for _name in ("Crypto.Cipher.AES", "Cryptodome.Cipher.AES"):
+    try:
+        _mod = importlib.import_module(_name)
+    except ImportError:  # pragma: no cover - depends on the system
+        continue
+    if hasattr(_mod, "MODE_GCM"):
+        AES = _mod
+        break
+
+NONCE_SIZE, TAG_SIZE = 12, 16
+MISSING_CRYPTO = "the Python package PyCryptodome (python3-pycryptodome)"
 
 
 class TwigFormatError(ValueError):
@@ -66,7 +76,13 @@ class WrongPassword(Exception):
 
 
 def encryption_available() -> bool:
-    return AESGCM is not None
+    return AES is not None
+
+
+def _gcm(key: bytes, nonce: bytes, aad: bytes):
+    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce, mac_len=TAG_SIZE)
+    cipher.update(aad)
+    return cipher
 
 
 @dataclass
@@ -165,14 +181,14 @@ def from_json(raw: bytes) -> Document:
 # ---------------------------------------------------------------- encryption
 
 def encrypt(plain: bytes, info: KeyInfo) -> bytes:
-    if AESGCM is None:
-        raise OSError("Password protection needs the Python 'cryptography' package.")
+    if AES is None:
+        raise OSError(f"Password protection needs {MISSING_CRYPTO}.")
     header = json.dumps({"version": VERSION, "cipher": "AES-256-GCM", "kdf": "scrypt",
                          "n": info.n, "r": info.r, "p": info.p,
                          "salt": base64.b64encode(info.salt).decode("ascii")}).encode() + b"\n"
-    nonce = os.urandom(12)
-    sealed = AESGCM(info.key).encrypt(nonce, zlib.compress(plain, 6), ENC_MAGIC + header)
-    return ENC_MAGIC + header + nonce + sealed
+    nonce = os.urandom(NONCE_SIZE)
+    cipher_text, tag = _gcm(info.key, nonce, ENC_MAGIC + header).encrypt_and_digest(zlib.compress(plain, 6))
+    return ENC_MAGIC + header + nonce + cipher_text + tag
 
 
 def _read_header(data: bytes):
@@ -192,17 +208,19 @@ def _read_header(data: bytes):
 
 def decrypt(data: bytes, password: Optional[str] = None, info: Optional[KeyInfo] = None):
     """Returns (plain JSON bytes, KeyInfo)."""
-    if AESGCM is None:
-        raise OSError("Opening password-protected files needs the Python 'cryptography' package.")
+    if AES is None:
+        raise OSError(f"Opening password-protected files needs {MISSING_CRYPTO}.")
     header, salt, (n, r, p), body = _read_header(data)
     if info is None or info.salt != salt:
         if password is None:
             raise PasswordRequired()
         info = derive_key(password, salt, n, r, p)
-    nonce, sealed = body[:12], body[12:]
+    if len(body) < NONCE_SIZE + TAG_SIZE:
+        raise TwigFormatError("The encrypted file is damaged.")
+    nonce, cipher_text, tag = body[:NONCE_SIZE], body[NONCE_SIZE:-TAG_SIZE], body[-TAG_SIZE:]
     try:
-        packed = AESGCM(info.key).decrypt(nonce, sealed, ENC_MAGIC + header)
-    except InvalidTag:
+        packed = _gcm(info.key, nonce, ENC_MAGIC + header).decrypt_and_verify(cipher_text, tag)
+    except ValueError:   # the tag does not match: wrong password or changed file
         raise WrongPassword() from None
     try:
         return zlib.decompress(packed), info

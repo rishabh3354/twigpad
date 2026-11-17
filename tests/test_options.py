@@ -15,7 +15,7 @@ from PyQt5.QtTest import QTest  # noqa: E402
 from PyQt5.QtWidgets import QAbstractItemView, QApplication  # noqa: E402
 
 from twigpad import hjt, portable  # noqa: E402
-from twigpad.ui.finddialog import SCOPE_ALL, SCOPE_NODE  # noqa: E402
+from twigpad.ui.finddialog import SCOPE_NODE  # noqa: E402
 from twigpad.ui.mainwindow import MainWindow  # noqa: E402
 from tests.test_hjt import SAMPLE, windows_file  # noqa: E402
 
@@ -66,7 +66,7 @@ class OptionTests(unittest.TestCase):
         self.assertEqual(self.win.find_dialog().scope_combo.currentIndex(), SCOPE_NODE)
         self.win.editor.hasFocus = lambda: False
         self.win.find_here()
-        self.assertEqual(self.win.find_dialog().scope_combo.currentIndex(), SCOPE_ALL)
+        self.assertTrue(self.win.tree_search_dialog().isVisible())
 
     # ------------------------------------------------------------ article edits
 
@@ -171,14 +171,70 @@ class OptionTests(unittest.TestCase):
 
     # ------------------------------------------------------------ toolbars
 
-    def test_toolbars_can_be_toggled(self):
-        names = set(self.win.toolbars)
-        self.assertEqual(names, {"file-toolbar", "tree-toolbar", "article-toolbar", "view-toolbar",
-                                 "navigate-toolbar"})
-        for tb in self.win.toolbars.values():
+    def test_toolbars_match_the_classic_layout(self):
+        w = self.win
+        expected = {
+            "file-bar": [w.act_new, w.act_open, w.act_save, w.act_print, w.act_options],
+            "article-edit-bar": [w.act_cut, w.act_copy, w.act_paste, w.act_delete_text],
+            "tree-edit-bar": [w.act_add_child, w.act_add_before, w.act_add_after, w.act_delete, w.act_rename],
+            "view-bar": [w.act_find, w.act_search_tree, w.act_view_modes["both"], w.act_view_modes["tree"],
+                         w.act_view_modes["article"], w.act_word_wrap],
+            "navigate-bar": [w.act_follow_link, w.act_move_up, w.act_move_down, w.act_move_left,
+                             w.act_move_right, w.act_expand_branch, w.act_collapse_branch],
+            "extras-bar": [w.act_undo, w.act_redo, w.act_bold, w.act_italic, w.act_focus, w.act_unfocus],
+        }
+        self.assertEqual(list(w.toolbars), list(expected))   # left-to-right order
+        for name, acts in expected.items():
+            tb = w.toolbars[name]
             self.assertTrue(tb.isMovable())
-        sub = next(a.menu() for a in self.win.view_menu.actions() if a.menu() and "Toolbars" in a.text().replace("&", ""))
-        self.assertEqual(len(sub.actions()), 5)
+            self.assertEqual([a for a in tb.actions() if not a.isSeparator()], acts, name)
+            for a in acts:
+                self.assertFalse(a.icon().isNull(), a.text())
+        w.show()
+        app.processEvents()
+        self.assertTrue(all(w.toolbars[n].isVisible() for n in list(expected)[:5]))
+        self.assertFalse(w.toolbars["extras-bar"].isVisible())
+        self.assertIs(w.act_options.menu(), w.options_menu)
+        sub = next(a.menu() for a in w.view_menu.actions() if a.menu() and "Toolbars" in a.text().replace("&", ""))
+        self.assertEqual(len([a for a in sub.actions() if not a.isSeparator() and not a.menu()]), 8)
+        w._show_toolbars(False)
+        self.assertFalse(any(tb.isVisible() for tb in w.toolbars.values()))
+
+    def test_toolbar_icon_size(self):
+        w = self.win
+        self.assertTrue(all(tb.iconSize().width() == 24 for tb in w.toolbars.values()))   # default
+        w.act_icon_sizes[16].trigger()
+        self.assertTrue(all(tb.iconSize().width() == 16 for tb in w.toolbars.values()))
+        self.assertEqual(w.settings.value("view/toolbar_icon_size", type=int), 16)
+        w.settings.sync()
+        win = self.make_window()
+        try:
+            self.assertTrue(win.act_icon_sizes[16].isChecked())
+            self.assertEqual(win.toolbars["file-bar"].iconSize().width(), 16)
+        finally:
+            win.close()
+            win.deleteLater()
+
+    def test_rename_box_fits_the_title(self):
+        from PyQt5.QtWidgets import QLineEdit
+        for mode in ("light", "dark"):
+            self.win.set_theme(mode)
+            for classic in (True, False):
+                self.win.set_classic_tree(classic)
+                self.win.show()
+                self.win.add_child_node()
+                app.processEvents()
+                ed = self.tree.findChild(QLineEdit, "node-title-editor")
+                self.assertIsNotNone(ed)
+                self.assertGreaterEqual(ed.height(), ed.sizeHint().height(), (mode, classic))
+                self.tree.closePersistentEditor(self.tree.currentItem())
+                self.tree.setFocus()
+                app.processEvents()
+        self.win.set_theme("auto")
+
+    def test_search_tree_opens_tree_search(self):
+        self.win.act_search_tree.trigger()
+        self.assertTrue(self.win.tree_search_dialog().isVisible())
 
     # ------------------------------------------------------------ startup
 

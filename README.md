@@ -38,6 +38,9 @@ to start, simple to use, and built to last.
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [FAQ](#faq)
 - [Contributing](#contributing)
+- [Report a bug](#report-a-bug)
+- [Support the developer](#support-the-developer)
+- [More apps by the developer](#more-apps-by-the-developer)
 - [License](#license)
 
 ## Features
@@ -61,6 +64,7 @@ to start, simple to use, and built to last.
 - **Spell check and word count.** Misspelled words are underlined, with suggestions on right-click.
 - **Safe with other programs.** Warns when the file is changed by another program or a sync tool.
 - **Read-only mode, tray and portable mode.** Protect a file from changes, hide to the system tray with <kbd>Ctrl</kbd>+<kbd>M</kbd>, and keep settings on a USB stick.
+- **Light and dark themes.** A clean light theme and an easy-on-the-eyes dark theme, or follow your desktop automatically.
 - **Fast and light.** Starts instantly, works fully from the keyboard, runs on any Linux desktop.
 
 <p align="center">
@@ -105,7 +109,9 @@ If you have used other two-pane outliners such as **KeyNote NF**, **NoteCase**,
 
 ## Install
 
-Twigpad needs Python 3.8+ and PyQt5.
+Twigpad needs Python 3.8+ and PyQt5. Password protection also needs
+PyCryptodome (`pip install` adds it; on Debian or Ubuntu it is the
+`python3-pycryptodome` package).
 
 ```bash
 git clone https://github.com/rishabh3354/twigpad.git
@@ -208,6 +214,33 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup and
 [docs/file-format.md](docs/file-format.md) for how `.hjt` files are read and written.
 
 If Twigpad is useful to you, a ⭐ on GitHub helps others find it.
+
+## Report a bug
+
+Use **Help → Report a Bug** in Twigpad, or
+[open an issue on GitHub](https://github.com/rishabh3354/twigpad/issues/new?labels=bug).
+The menu item fills in your Twigpad, Qt, Python and Linux versions for you.
+
+## Support the developer
+
+Twigpad is free and made by [Rishabh Bhardwaj](https://warlordsoftwares.com/rishabh-bhardwaj/) at
+[Warlord Softwares](https://warlordsoftwares.com/). If it saves you time, you can support its
+development with a donation:
+
+**[Donate with PayPal](https://paypal.me/TechRishabh/10)**
+
+## More apps by the developer
+
+- **[PDF 30-in-1 PRO](https://warlordsoftwares.com/trending-apps/pdf-30-in-1-offline-pdf-editor-and-converter/)**: Merge, split, convert, compress, sign and OCR PDF files, all offline
+- **[4KTUBE PRO](https://warlordsoftwares.com/trending-apps/4ktube-pro-best-youtube-video-downloader-linux/)**: Download YouTube videos, playlists and audio in up to 4K quality
+- **[4KWALL PRO](https://warlordsoftwares.com/trending-apps/4kwall-modern-wallpaper-app-with-auto-wallpaper-changer/)**: Find beautiful high-resolution wallpapers and change them automatically
+- **[FORMAT LAB PRO](https://warlordsoftwares.com/trending-apps/formatlab-pro-convert-or-compress-video-audio-formats-one-click/)**: Convert and compress video and audio files in one click
+- **[Torrent4K PRO](https://warlordsoftwares.com/trending-apps/torrent4k-torrent-client-and-video-player/)**: Torrent client that lets you watch videos while they download
+- **[PDF2OCR PRO](https://warlordsoftwares.com/trending-apps/pdf2go-convert-imagespdf-text-uding-ocr-technology/)**: Turn scanned pages and images into text you can copy and search (free)
+- **[JPEG2PDF PRO](https://warlordsoftwares.com/trending-apps/jpg2pdf-pro-convert-your-images-pdfs/)**: Combine a folder of pictures into one PDF (free)
+- **[SpeedX](https://warlordsoftwares.com/trending-apps/speedx-system-monitor-app-linux/)**: Live internet speed and system monitor for your desktop (free)
+
+See [all Linux apps by Warlord Softwares](https://warlordsoftwares.com/apps/linux-apps/).
 
 ## License
 

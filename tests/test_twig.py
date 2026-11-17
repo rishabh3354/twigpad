@@ -19,7 +19,7 @@ from twigpad.ui.mainwindow import MainWindow  # noqa: E402
 from tests.test_hjt import SAMPLE, windows_file  # noqa: E402
 
 app = QApplication.instance() or QApplication([])
-needs_crypto = unittest.skipUnless(twig.encryption_available(), "cryptography is not installed")
+needs_crypto = unittest.skipUnless(twig.encryption_available(), "PyCryptodome is not installed")
 
 
 def png(color="red", w=8, h=6):
