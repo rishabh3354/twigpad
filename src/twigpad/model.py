@@ -7,15 +7,23 @@ Each node has a single-line title and a plain-text article, as in the
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 
 @dataclass(eq=False)
 class Node:
     title: str = "New node"
-    text: str = ""
+    text: str = ""                     # plain text (for formatted notes: their text without formatting)
     children: List["Node"] = field(default_factory=list)
     parent: Optional["Node"] = field(default=None, repr=False)
+    html: str = ""                     # formatted article (.twig only); empty = plain text
+    icon: str = ""                     # icon name (.twig only); empty = the standard folder
+    color: str = ""                    # title/icon colour such as "#c0392b" (.twig only)
+
+    @property
+    def extras(self) -> bool:
+        """Does this node use something only a .twig file can store?"""
+        return bool(self.html or self.icon or self.color)
 
     def add_child(self, child: "Node", index: Optional[int] = None) -> "Node":
         child.parent = self
@@ -42,6 +50,8 @@ class Document:
     encoding: str = "cp1252"
     version: str = "2.7"
     warnings: List[str] = field(default_factory=list)
+    images: Dict[str, bytes] = field(default_factory=dict)   # name -> image file data
+    crypto: Any = None                 # twig.KeyInfo when the file is password protected
 
     @property
     def top_nodes(self) -> List[Node]:
@@ -54,6 +64,11 @@ class Document:
 
     def node_count(self) -> int:
         return sum(1 for _ in self.walk())
+
+    def needs_twig(self) -> bool:
+        """True when saving as .hjt would lose something (formatting, images,
+        icons, colours or the password)."""
+        return self.crypto is not None or any(n.extras for n, _ in self.walk())
 
     def ensure_single_root(self, title: str) -> bool:
         """A .hjt file may have only one top node. If there are several, put

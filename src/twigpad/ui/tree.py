@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from PyQt5.QtCore import QSize, Qt, pyqtSignal
-from PyQt5.QtGui import QDrag
+from PyQt5.QtCore import QModelIndex, QSize, Qt, pyqtSignal
+from PyQt5.QtGui import QBrush, QColor, QDrag
 from PyQt5.QtWidgets import QAbstractItemView, QTreeWidget, QTreeWidgetItem
 
 from ..model import Document, Node
@@ -17,11 +17,27 @@ DEFAULT_TITLE = "New node"
 class NoteItem(QTreeWidgetItem):
     """A tree row. The article text lives on the item itself."""
 
-    def __init__(self, title: str = DEFAULT_TITLE, body: str = ""):
+    def __init__(self, title: str = DEFAULT_TITLE, body: str = "", html: str = "",
+                 icon: str = "", color: str = ""):
         super().__init__([title])
         self.body = body
+        self.html = html          # formatted article; empty = plain text
+        self.icon = ""
+        self.color = ""
         self.cursor_pos = 0
         self.setFlags(self.flags() | Qt.ItemIsEditable)
+        if icon or color:
+            self.set_look(icon, color)
+
+    def set_look(self, icon: Optional[str] = None, color: Optional[str] = None) -> None:
+        """Change the note's icon and/or colour (None leaves it as it is)."""
+        if icon is not None:
+            self.icon = icon
+        if color is not None:
+            self.color = color
+        self.setForeground(0, QBrush(QColor(self.color)) if self.color else QBrush())
+        custom = bool(self.icon or self.color)
+        self.setData(0, Qt.DecorationRole, treestyle.note_icon(self.icon, self.color) if custom else None)
 
     @property
     def title(self) -> str:
@@ -49,6 +65,8 @@ class NoteTree(QTreeWidget):
         self.setUniformRowHeights(True)
         self.setAnimated(False)
         self.classic = False
+        self.hoisted: Optional[NoteItem] = None   # branch shown alone ("focus"), or None
+        self._hidden: List[QTreeWidgetItem] = []
         self.setItemDelegate(treestyle.TreeDelegate(self))
         self.set_classic(True)
 
@@ -69,16 +87,76 @@ class NoteTree(QTreeWidget):
         else:
             super().drawBranches(painter, rect, index)
 
+    # ------------------------------------------------------------ focus (hoisting)
+    # Focusing on a branch shows only that node and the nodes inside it: the
+    # view's root becomes the node's parent and the node's siblings are hidden.
+
+    def contains(self, item: Optional[QTreeWidgetItem]) -> bool:
+        """Is ``item`` still part of this tree?"""
+        if item is None:
+            return False
+        top = item
+        while top.parent() is not None:
+            top = top.parent()
+        return self.indexOfTopLevelItem(top) >= 0
+
+    def hoist(self, item: Optional[NoteItem]) -> None:
+        """Show only ``item`` and its subtree; ``None`` shows the whole tree."""
+        if item is not None and (item.parent() is None or not self.contains(item)):
+            item = None   # the top node already is the whole tree
+        self.hoisted = item
+        self._apply_hoist()
+        if item is not None:
+            item.setExpanded(True)
+            cur = self.currentItem()
+            if not self.is_ancestor(item, cur):
+                self.setCurrentItem(item)
+            self.scrollToItem(self.currentItem())
+
+    def _apply_hoist(self) -> None:
+        for it in self._hidden:
+            try:
+                it.setHidden(False)
+            except RuntimeError:   # item already deleted
+                pass
+        self._hidden = []
+        item = self.hoisted
+        if item is not None and not self.contains(item):
+            self.hoisted = item = None
+        if item is None:
+            self.setRootIndex(QModelIndex())
+        else:
+            parent = item.parent()
+            self.setRootIndex(self.indexFromItem(parent))
+            for i in range(parent.childCount()):
+                sib = parent.child(i)
+                if sib is not item:
+                    sib.setHidden(True)
+                    self._hidden.append(sib)
+        self.viewport().update()
+
+    def in_view(self, item: Optional[QTreeWidgetItem]) -> bool:
+        """Is ``item`` visible in the current focus (always True without focus)?"""
+        return self.hoisted is None or self.is_ancestor(self.hoisted, item)
+
+    def is_view_top(self, item: Optional[QTreeWidgetItem]) -> bool:
+        """The top node, or the focused node while focusing on a branch: nothing
+        can be added next to it, and it can't be moved or deleted."""
+        return item is not None and (item.parent() is None or item is self.hoisted)
+
     # ------------------------------------------------------------ conversion
 
     @staticmethod
     def _make_item(node: Node) -> NoteItem:
-        item = NoteItem(node.title, node.text)
+        item = NoteItem(node.title, node.text, node.html, node.icon, node.color)
         for child in node.children:
             item.addChild(NoteTree._make_item(child))
         return item
 
     def load_document(self, doc: Document) -> None:
+        self.hoisted = None
+        self._hidden = []
+        self.setRootIndex(QModelIndex())
         self.clear()
         for top in doc.top_nodes:
             item = self._make_item(top)
@@ -89,7 +167,7 @@ class NoteTree(QTreeWidget):
 
     @staticmethod
     def item_to_node(item: NoteItem) -> Node:
-        node = Node(item.title, item.body)
+        node = Node(item.title, item.body, html=item.html, icon=item.icon, color=item.color)
         for i in range(item.childCount()):
             node.add_child(NoteTree.item_to_node(item.child(i)))
         return node
@@ -178,6 +256,8 @@ class NoteTree(QTreeWidget):
         self._restore_expanded(item, states)
         if new_parent is not self.invisibleRootItem():
             new_parent.setExpanded(True)
+        if self.hoisted is not None:
+            self._apply_hoist()
         self.setCurrentItem(item)
         self.scrollToItem(item)
         self.structureChanged.emit()
@@ -193,7 +273,7 @@ class NoteTree(QTreeWidget):
 
     def add_sibling(self, after: bool = True, title: str = DEFAULT_TITLE) -> Optional[NoteItem]:
         cur = self.currentItem()
-        if self.is_top(cur):
+        if self.is_view_top(cur):
             return None
         new = NoteItem(title)
         if cur is None:
@@ -238,14 +318,14 @@ class NoteTree(QTreeWidget):
 
     def move_up(self) -> bool:
         cur = self.currentItem()
-        if cur is None or self.index_in_parent(cur) == 0:
+        if cur is None or self.is_view_top(cur) or self.index_in_parent(cur) == 0:
             return False
         self.move_item(cur, cur.parent(), self.index_in_parent(cur) - 1)
         return True
 
     def move_down(self) -> bool:
         cur = self.currentItem()
-        if cur is None:
+        if cur is None or self.is_view_top(cur):
             return False
         parent = self._siblings_parent(cur)
         idx = parent.indexOfChild(cur)
@@ -257,8 +337,8 @@ class NoteTree(QTreeWidget):
     def move_left(self) -> bool:
         """Promote: become the next sibling of the current parent."""
         cur = self.currentItem()
-        if cur is None or cur.parent() is None or cur.parent().parent() is None:
-            return False  # children of the top node cannot become top nodes
+        if cur is None or self.is_view_top(cur) or self.is_view_top(cur.parent()):
+            return False  # children of the top (or focused) node stay inside it
         parent = cur.parent()
         grand = parent.parent()
         self.move_item(cur, grand, self._siblings_parent(parent).indexOfChild(parent) + 1)
@@ -267,7 +347,7 @@ class NoteTree(QTreeWidget):
     def move_right(self) -> bool:
         """Demote: become the last child of the previous sibling."""
         cur = self.currentItem()
-        if cur is None:
+        if cur is None or self.is_view_top(cur):
             return False
         idx = self.index_in_parent(cur)
         if idx == 0:
@@ -280,7 +360,7 @@ class NoteTree(QTreeWidget):
         """The nodes after the selected one (same level) become its last
         children. Returns how many nodes moved."""
         cur = self.currentItem()
-        if cur is None or self.is_top(cur):
+        if cur is None or self.is_view_top(cur):
             return 0
         parent = self._siblings_parent(cur)
         idx = parent.indexOfChild(cur)
@@ -304,7 +384,7 @@ class NoteTree(QTreeWidget):
         """The children of the selected node become its siblings, placed right
         after it. Not possible on the top node. Returns how many nodes moved."""
         cur = self.currentItem()
-        if cur is None or self.is_top(cur) or cur.childCount() == 0:
+        if cur is None or self.is_view_top(cur) or cur.childCount() == 0:
             return 0
         parent = self._siblings_parent(cur)
         idx = parent.indexOfChild(cur)
@@ -329,7 +409,7 @@ class NoteTree(QTreeWidget):
     def select_sibling(self, step: int) -> bool:
         """Jump to the next (+1) or previous (-1) node at the same level."""
         cur = self.currentItem()
-        if cur is None:
+        if cur is None or self.is_view_top(cur):
             return False
         parent = self._siblings_parent(cur)
         idx = parent.indexOfChild(cur) + step
@@ -379,7 +459,7 @@ class NoteTree(QTreeWidget):
 
     def startDrag(self, supported_actions) -> None:
         item = self.currentItem()
-        if item is None or self.is_top(item):
+        if item is None or self.is_view_top(item):
             return
         drag = QDrag(self)
         drag.setMimeData(self.mimeData([item]))
@@ -402,8 +482,8 @@ class NoteTree(QTreeWidget):
             parent, index = target, target.childCount()
         else:
             parent = target.parent()
-            if parent is None:
-                event.ignore()  # next to the top node
+            if self.is_view_top(target):
+                event.ignore()  # next to the top (or focused) node
                 return
             index = self._siblings_parent(target).indexOfChild(target)
             if pos == QAbstractItemView.BelowItem:

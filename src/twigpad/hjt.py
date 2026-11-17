@@ -246,8 +246,16 @@ def encode_text(text: str, encoding: Optional[str] = None) -> Tuple[bytes, str]:
 
 
 def save(doc: Document, path: str, encoding: Optional[str] = None) -> None:
-    """Write atomically so a crash mid-save never destroys the previous file."""
+    """Save as .hjt. Formatting, images, icons and colours are not kept:
+    the format holds plain text only."""
     data, used = encode_text(serialize(doc), encoding or doc.encoding)
+    write_atomic(path, data)
+    doc.path = path
+    doc.encoding = used
+
+
+def write_atomic(path: str, data: bytes) -> None:
+    """Write atomically so a crash mid-save never destroys the previous file."""
     directory = os.path.dirname(os.path.abspath(path))
     fd, tmp = tempfile.mkstemp(prefix=".twigpad-", suffix=".tmp", dir=directory)
     try:
@@ -266,5 +274,3 @@ def save(doc: Document, path: str, encoding: Optional[str] = None) -> None:
         if os.path.exists(tmp):
             os.unlink(tmp)
         raise
-    doc.path = path
-    doc.encoding = used

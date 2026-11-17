@@ -9,4 +9,4 @@ Terminal=false
 StartupNotify=true
 Categories=Office;
 Keywords=notes;notebook;outliner;outline;tree;hierarchical;organizer;knowledge base;PIM;hjt;
-MimeType=application/x-hjt;
+MimeType=application/x-hjt;application/x-twigpad;

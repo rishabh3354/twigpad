@@ -6,7 +6,7 @@ import re
 from typing import List, Optional
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QTextCursor
+from PyQt5.QtGui import QTextCursor, QTextDocument
 from PyQt5.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QPushButton, QVBoxLayout,
@@ -281,16 +281,24 @@ class FindDialog(QDialog):
                     item.setText(0, new_title)
                     changed += n
             if text:
-                new_body, n = search.replace_in(item.body, pattern, repl, regex)
-                if n:
-                    changed += n
-                    if item is win._editing_item:
-                        # Through the editor so Ctrl+Z can undo it for this node.
-                        cursor = win.editor.textCursor()
-                        cursor.select(QTextCursor.Document)
-                        cursor.insertText(new_body)
+                if item is win._editing_item:
+                    # Through the editor, so Ctrl+Z can undo it and formatting is kept.
+                    n = replace_in_document(win.editor.document(), pattern, repl, regex)
+                    if n:
+                        changed += n
                         win._commit_editor()
-                    else:
+                elif item.html:
+                    doc = QTextDocument()
+                    doc.setHtml(item.html)
+                    n = replace_in_document(doc, pattern, repl, regex)
+                    if n:
+                        changed += n
+                        item.html = doc.toHtml()
+                        item.body = doc.toPlainText()
+                else:
+                    new_body, n = search.replace_in(item.body, pattern, repl, regex)
+                    if n:
+                        changed += n
                         item.body = new_body
             if changed:
                 total += changed
@@ -307,3 +315,20 @@ class FindDialog(QDialog):
             self.find(backward=bool(event.modifiers() & Qt.ShiftModifier))
             return
         super().keyPressEvent(event)
+
+
+def replace_in_document(doc: QTextDocument, pattern, repl: str, regex: bool) -> int:
+    """Replace every match in a text document, keeping the formatting around
+    each match. One undo step."""
+    text = doc.toPlainText()
+    matches = [m for m in pattern.finditer(text) if m.end() > m.start()]
+    if not matches:
+        return 0
+    cursor = QTextCursor(doc)
+    cursor.beginEditBlock()
+    for m in reversed(matches):
+        cursor.setPosition(search.to_qt(text, m.start()))
+        cursor.setPosition(search.to_qt(text, m.end()), QTextCursor.KeepAnchor)
+        cursor.insertText(m.expand(repl) if regex else repl)
+    cursor.endEditBlock()
+    return len(matches)

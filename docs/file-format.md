@@ -61,3 +61,48 @@ The reader recovers as much as it can and records each problem in
 - `dt=RTF` articles: converted to plain text (`src/twigpad/rtf.py`).
 
 `.zip` files are searched for the first member that reads as a `.hjt` file.
+
+# The `.twig` file format
+
+Twigpad's own format, for files that use what `.hjt` can't hold: formatted
+notes, pictures, note icons and colours, and passwords. The reader and writer
+live in `src/twigpad/twig.py`.
+
+A plain `.twig` file is UTF-8 JSON:
+
+```json
+{
+ "format": "twigpad",
+ "version": 1,
+ "nodes": [
+  {"title": "Top note", "text": "plain text",
+   "children": [
+    {"title": "Formatted", "text": "its text without formatting",
+     "html": "<html>... <img src=\"twigimg:1a2b3c.png\"> ...</html>",
+     "icon": "star", "color": "#c0392b"}
+   ]}
+ ],
+ "images": {"1a2b3c.png": "<base64 data>"}
+}
+```
+
+- `text` is always present, so tools can read the notes without parsing HTML.
+- `html` (Qt rich text) is present only for formatted notes. Pictures are
+  stored once in `images` and referenced as `twigimg:<name>`.
+- `icon` is one of `page`, `star`, `flag`, `check`, `warning`, `info`, `heart`,
+  `bookmark`, `idea` (missing = folder). `color` is `#rrggbb`.
+- There is exactly one top node, as in `.hjt`.
+
+## Password-protected files
+
+```
+TWIGPAD-ENCRYPTED\n
+{"version": 1, "cipher": "AES-256-GCM", "kdf": "scrypt", "n": 32768, "r": 8, "p": 1, "salt": "<base64>"}\n
+<12-byte nonce><ciphertext and 16-byte tag>
+```
+
+The key is derived from the password with scrypt using the salt and settings
+in the header. The plaintext is the JSON above, compressed with zlib. Both
+header lines are passed to AES-GCM as associated data, so changing any byte of
+the file makes it fail to open. Every save uses a fresh nonce.
+

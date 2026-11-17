@@ -44,6 +44,26 @@ All notable changes to Twigpad are listed here. The format follows
   current article.
 - Portable settings: put an empty `twigpad.ini` next to the program or
   AppImage to keep the settings there.
+- Focus on a branch (Ctrl+]): show only the selected note and the notes under
+  it; Ctrl+[ goes back up a level.
+- Tabs: open a branch in its own tab (Ctrl+T); each tab remembers its place.
+- Backlinks panel: which notes link to the selected one.
+- Tags: write #tags in titles or articles; the Tags panel lists every tag and
+  the notes that use it.
+- Word count in the status bar (for the selection too) and Edit → Word Count
+  for the note, branch and whole file.
+- Warns when the open file is changed or deleted by another program, and asks
+  before saving over someone else's changes.
+- Spell checking with the system's Hunspell dictionaries: misspelled words are
+  underlined; right-click for suggestions or Add to Dictionary.
+- New `.twig` file format for what `.hjt` can't hold. `.hjt` files stay plain
+  text and are only changed when you choose to save them as plain `.hjt`.
+- Formatted notes: bold, italic, underline, strikethrough, colours, fonts,
+  headings, lists, alignment, tables, horizontal lines and pictures
+  (inserted or pasted). Exported to HTML and printed with their formatting.
+- Note icons and colours (Node → Icon and Colour).
+- Password protection: File → Set Password encrypts the file (AES-256-GCM,
+  key from scrypt).
 
 ### Changed
 - A file has exactly one top node, as the `.hjt` format requires. Files with

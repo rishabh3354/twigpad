@@ -32,6 +32,7 @@
   <provides>
     <binary>twigpad</binary>
     <mediatype>application/x-hjt</mediatype>
+    <mediatype>application/x-twigpad</mediatype>
   </provides>
 
   <url type="homepage">https://github.com/rishabh3354/twigpad</url>

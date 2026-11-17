@@ -39,6 +39,18 @@ More in the **Node** menu:
 - **Copy Node Name** copies the title; **Paste Node Name** renames the node to
   the first line of the clipboard.
 
+### Focus and tabs
+
+- **View → Focus on Branch** (Ctrl+]) shows only the selected note and the
+  notes inside it. **Focus Out One Level** (Ctrl+[) goes up a level, and
+  **Show Whole Tree** shows everything again. While focused, the focused note
+  works like the top note. Jumping to a note outside the branch (from Find, a
+  link or a backlink) shows the whole tree again.
+- **View → Open Branch in New Tab** (Ctrl+T) opens the selected branch in a
+  tab of its own above the tree. Each tab remembers the note selected in it.
+  Ctrl+PgDown / Ctrl+PgUp switch tabs; Ctrl+W closes one. The tab bar appears
+  once there is more than one tab.
+
 ### The top node
 
 A file has exactly one top node, which holds everything else. You can rename
@@ -70,6 +82,77 @@ nothing is selected (Ctrl+Z undoes it):
 | UPPERCASE / lowercase | Changes letter case |
 | Remove Leading Spaces | Removes spaces and tabs at the start of each line |
 | Remove Leading Spaces and Returns | Removes indentation and `>` quote marks, and joins wrapped lines into paragraphs: for text pasted from an email |
+
+## Formatted notes
+
+Notes start as plain text. Use any command in the top part of the **Format**
+menu and the note becomes a *formatted note*:
+
+| Command | Key |
+|---|---|
+| Bold, Italic, Underline | Ctrl+B, Ctrl+I, Ctrl+U |
+| Strikethrough, Text Colour, Highlight Colour, Font | |
+| Larger / Smaller Text | Ctrl+Shift+. / Ctrl+Shift+, |
+| Paragraph Style: Normal Text, Heading 1-3 | Ctrl+0, Ctrl+1, Ctrl+2, Ctrl+3 |
+| Alignment, Bulleted List, Numbered List | |
+| Insert → Picture, Table, Horizontal Line | |
+| Table → Insert Row / Column, Delete Row / Column | |
+| Clear Formatting (of the selected text) | |
+| Convert Note to Plain Text | |
+
+Pasting a picture (a screenshot, an image copied in a viewer) also makes the
+note formatted. In plain notes, pasted text loses its formatting, as before.
+Search, links, tags, spelling and word count work in formatted notes too.
+
+Formatted notes, pictures, note icons and colours, and passwords are saved in
+**Twigpad notes files (`.twig`)**. A `.hjt` file holds plain text only, so
+when you save a `.hjt` file that uses any of these, Twigpad asks whether to
+save it as `.twig` (keeps everything) or as a plain `.hjt` (keeps the text).
+Your `.hjt` file is never changed unless you choose plain `.hjt`.
+
+## Note icons and colours
+
+Right-click a note and choose **Icon and Colour** (also in the **Node**
+menu): pick an icon (folder, page, star, flag, done, important, information,
+heart, bookmark, idea) and a colour for the title and icon. Saved in `.twig`
+files.
+
+## Password protection
+
+**File → Set Password** encrypts the file. It is saved as a `.twig` file,
+encrypted with AES-256; Twigpad asks for the password when you open it.
+**File → Remove Password** saves it unencrypted from then on. The status bar
+shows *Password protected* while a protected file is open.
+
+**If you forget the password, the notes cannot be recovered.** Backup copies
+(`.bak`) of a protected file are protected with the same password; Twigpad
+never keeps an unencrypted backup of it. When you protect a `.hjt` file, it is
+saved as a new `.twig` file and the original `.hjt` stays as it was: delete it
+if it should stay private.
+
+## Tags, backlinks and word count
+
+- **Tags**: write `#` followed by a word anywhere in a title or article, for
+  example `#todo` or `#work-project`. Tags are shown in green. **View →
+  Panels → Tags** (Ctrl+Shift+G) lists every tag with the number of notes;
+  click a tag to see its notes, and click a note to go to it. Case does not
+  matter: `#Todo` and `#todo` are the same tag.
+- **Backlinks**: **View → Panels → Backlinks** (Ctrl+Shift+B) lists the notes
+  that link to the selected one with a `[node://…]` link.
+- **Word count**: the status bar shows the words in the article, or in the
+  selection. **Edit → Word Count** also counts the note with its subnotes and
+  the whole file.
+
+## Spelling
+
+Misspelled words are underlined in red. Right-click one for suggestions, or
+**Add to Dictionary** to stop it being marked. Turn it off with **Options →
+Check Spelling**, and choose the dictionary under **Options → Spelling
+Language**. Words in capitals, links and tags are not checked.
+
+Spell checking uses the Hunspell dictionaries installed on your system. To add
+a language, install its dictionary package, for example `hunspell-de-de` on
+Debian and Ubuntu or `hunspell-de` on Fedora.
 
 ## View
 
@@ -115,8 +198,8 @@ expressions. **Find All** lists every match; click one to jump to it.
 
 ## Files and backups
 
-- **Open** accepts `.hjt` files, backup copies (`.bak`, `.hjt~`) and `.zip`
-  archives that contain a `.hjt` file. Backups are opened as a new unsaved
+- **Open** accepts `.twig` and `.hjt` files, backup copies (`.bak`, `.hjt~`)
+  and `.zip` archives that contain a `.hjt` file. Backups are opened as a new unsaved
   file, so **Save** asks for a new name instead of overwriting the backup.
 - Damaged or cut-off files are opened as far as possible; a message lists
   what was repaired.
@@ -126,15 +209,20 @@ expressions. **Find All** lists every match; click one to jump to it.
   node. **CSV File** adds a node per row: the first column is the title, the
   other columns become the article.
 - **File → Export** writes the selected node, its branch or the whole file as
-  a numbered text outline or as an HTML web page with a table of contents.
+  a numbered text outline or as an HTML web page with a table of contents
+  (formatted notes and pictures included).
   **Selected Node and Subnodes as Tree File** saves a branch as its own `.hjt`
-  file.
+  file; **as Twigpad File** saves it as `.twig` with its formatting (and the
+  same password, if the file has one).
 - **File → Print** shows a print preview of the selected branch, the selected
   node only, or the whole file.
 - **File → Read Only** protects the file from changes. Files you don't have
   permission to change are opened read only; **Save** then asks for a new name.
 - **File → Minimize to Tray** (Ctrl+M) hides the window to the system tray;
   click the tray icon to bring it back. Without a tray it minimizes normally.
+- If another program changes the open file, Twigpad asks whether to reload
+  it. If you keep your version, or the file was deleted, **Save** writes your
+  version. Saving over changes made elsewhere always asks first.
 - Files are saved in the Windows-compatible encoding when possible, so they
   stay readable by other programs that use the `.hjt` format.
 

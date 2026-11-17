@@ -46,7 +46,7 @@ to start, simple to use, and built to last.
 - **Search everything.** Find and replace across all note titles and text, with a list of every match.
 - **Branch clipboard.** Cut, copy and paste a note with all its subnotes, also between windows.
 - **Links.** Link to websites, email addresses, files and other notes (`[node://…]`); <kbd>Ctrl</kbd>+<kbd>H</kbd> or <kbd>Ctrl</kbd>+click opens them.
-- **One plain-text file.** Your notebook is a single `.hjt` file: easy to back up, sync and keep for decades.
+- **Your notes in one file.** A notebook is a single `.hjt` file (plain text) or `.twig` file (with formatting and pictures): easy to back up, sync and keep for decades.
 - **Recovers what others can't.** Opens backup copies (`.bak`, `.hjt~`), zipped backups and damaged or truncated files, and saves everything it can.
 - **Merge notebooks.** Combine several files or old backups into one tree.
 - **Safe by default.** Keeps a backup copy when you save, writes files atomically, optional auto-save.
@@ -54,6 +54,12 @@ to start, simple to use, and built to last.
 - **Import anything.** Text files (several at once), CSV files (a note per row), other tree files and backups.
 - **Clean up pasted text.** UPPERCASE, lowercase, and removing indentation, quote marks and hard line breaks from pasted email.
 - **Collect snippets.** Automatic Paste adds everything you copy in other programs to the current note.
+- **Formatted notes and pictures.** Bold, colours, headings, lists, tables and pictures, plus icons and colours for notes.
+- **Password protection.** Encrypt a notes file with AES-256.
+- **Focus and tabs.** Focus on one branch to see only it, or open branches in tabs of their own.
+- **Tags and backlinks.** Write `#tags` anywhere and browse notes by tag; see which notes link to the current one.
+- **Spell check and word count.** Misspelled words are underlined, with suggestions on right-click.
+- **Safe with other programs.** Warns when the file is changed by another program or a sync tool.
 - **Read-only mode, tray and portable mode.** Protect a file from changes, hide to the system tray with <kbd>Ctrl</kbd>+<kbd>M</kbd>, and keep settings on a USB stick.
 - **Fast and light.** Starts instantly, works fully from the keyboard, runs on any Linux desktop.
 
@@ -139,7 +145,11 @@ twigpad --dump notes.hjt      # print a file's tree and exit
 | <kbd>Ctrl</kbd>+<kbd>F</kbd> / <kbd>Ctrl</kbd>+<kbd>R</kbd> | Find / replace in all notes |
 | <kbd>F3</kbd> | Find next |
 | <kbd>F5</kbd> | Insert date and time |
+| <kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>I</kbd> / <kbd>U</kbd> | Bold / italic / underline |
 | <kbd>F6</kbd> or <kbd>Ctrl</kbd>+<kbd>Tab</kbd> | Switch between tree and text |
+| <kbd>Ctrl</kbd>+<kbd>]</kbd> / <kbd>Ctrl</kbd>+<kbd>[</kbd> | Focus on the branch / focus out one level |
+| <kbd>Ctrl</kbd>+<kbd>T</kbd> / <kbd>Ctrl</kbd>+<kbd>W</kbd> | Open the branch in a new tab / close the tab |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> / <kbd>G</kbd> | Backlinks / Tags panel |
 | <kbd>Ctrl</kbd>+<kbd>M</kbd> | Minimize to the system tray |
 
 All keys and menus are in the [user guide](docs/user-guide.md).
@@ -173,10 +183,13 @@ open in the usual program. Put the cursor in a link and press <kbd>Ctrl</kbd>+<k
 or <kbd>Ctrl</kbd>+click it. To link to a note, select it and press
 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd>, then paste the link into any text.
 
-### Does it support formatting, images or attachments?
+### Does it support formatting, images or password protection?
 
-Not at the moment: notes are plain text, which keeps files small, fast and readable
-by any text editor. Rich-text notes from other programs open as plain text.
+Yes. Notes can have bold, italic, colours, headings, lists, tables and pictures,
+note icons and colours, and a file can be encrypted with a password. These are
+saved in Twigpad's own `.twig` files; `.hjt` files stay plain text, so they keep
+working with other programs. Attachments (other file types) are not supported:
+link to the file instead with **Edit → Insert → Link to File**.
 
 ### Does it sync between computers?
 
