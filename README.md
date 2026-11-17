@@ -46,6 +46,7 @@ to start, simple to use, and built to last.
 ## Features
 
 - **Tree of notes, unlimited depth.** Add, rename, move, sort and drag notes and whole branches.
+- **Undo everything.** Deleted, moved, sorted or pasted the wrong thing? <kbd>Ctrl</kbd>+<kbd>Z</kbd> in the tree brings it back, with all its subnotes.
 - **Search everything.** Find and replace across all note titles and text, with a list of every match.
 - **Branch clipboard.** Cut, copy and paste a note with all its subnotes, also between windows.
 - **Links.** Link to websites, email addresses, files and other notes (`[node://…]`); <kbd>Ctrl</kbd>+<kbd>H</kbd> or <kbd>Ctrl</kbd>+click opens them.
@@ -62,9 +63,13 @@ to start, simple to use, and built to last.
 - **Focus and tabs.** Focus on one branch to see only it, or open branches in tabs of their own.
 - **Tags and backlinks.** Write `#tags` anywhere and browse notes by tag; see which notes link to the current one.
 - **Spell check and word count.** Misspelled words are underlined, with suggestions on right-click.
+- **Opens from your file manager.** Double-click a `.hjt` file to open it in Twigpad (one click to set up).
 - **Safe with other programs.** Warns when the file is changed by another program or a sync tool.
 - **Read-only mode, tray and portable mode.** Protect a file from changes, hide to the system tray with <kbd>Ctrl</kbd>+<kbd>M</kbd>, and keep settings on a USB stick.
 - **Light and dark themes.** A clean light theme and an easy-on-the-eyes dark theme, or follow your desktop automatically.
+- **Comfortable to read.** A clean font and slightly larger text by default; choose your own fonts and zoom the tree or the article with <kbd>Ctrl</kbd>+mouse wheel.
+- **Move to a new computer easily.** Back up all your notes files and settings into one `.zip`, and restore them on the new computer; files already there are left alone.
+- **Spell check in 50 languages.** Download dictionaries from inside the app with one click.
 - **Fast and light.** Starts instantly, works fully from the keyboard, runs on any Linux desktop.
 
 <p align="center">
@@ -147,6 +152,7 @@ twigpad --dump notes.hjt      # print a file's tree and exit
 | <kbd>Alt</kbd>+<kbd>Up</kbd> / <kbd>Down</kbd> | Previous / next note at the same level |
 | <kbd>Ctrl</kbd>+<kbd>X</kbd> / <kbd>C</kbd> / <kbd>V</kbd> (in the tree) | Cut / copy / paste a branch |
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> | Sort subnotes |
+| <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> (in the tree) | Undo / redo a change to the tree |
 | <kbd>Ctrl</kbd>+<kbd>H</kbd> | Follow the link at the cursor |
 | <kbd>Ctrl</kbd>+<kbd>F</kbd> / <kbd>Ctrl</kbd>+<kbd>R</kbd> | Find / replace in all notes |
 | <kbd>F3</kbd> | Find next |
@@ -158,13 +164,15 @@ twigpad --dump notes.hjt      # print a file's tree and exit
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> / <kbd>G</kbd> | Backlinks / Tags panel |
 | <kbd>Ctrl</kbd>+<kbd>M</kbd> | Minimize to the system tray |
 
-All keys and menus are in the [user guide](docs/user-guide.md).
+Press <kbd>F1</kbd> in Twigpad for the full list with a search box. All keys and menus are also in the
+[user guide](docs/user-guide.md).
 
 ## FAQ
 
 ### How do I open `.hjt` files on Linux?
 
 Install Twigpad and open the file with **File → Open**, or run `twigpad file.hjt`.
+To open `.hjt` files by double-clicking them, choose **Options → Open .hjt Files with Twigpad**.
 
 ### Can I use my TreePad Lite files on Linux without Wine?
 
@@ -202,6 +210,11 @@ link to the file instead with **Edit → Insert → Link to File**.
 Twigpad stores everything in one file and needs no account, so you can keep that
 file in any synced folder (Syncthing, Nextcloud, Dropbox and so on).
 
+### How do I move my notes to a new computer?
+
+Use **File → Backup & Restore → Back Up Notes and Settings** on the old computer and
+**Restore from Backup** on the new one. Files that are already there are not overwritten.
+
 ### Is it free?
 
 Yes. Twigpad is free and open-source software under the GPL-3.0-or-later license.
@@ -217,7 +230,7 @@ If Twigpad is useful to you, a ⭐ on GitHub helps others find it.
 
 ## Report a bug
 
-Use **Help → Report a Bug** in Twigpad, or
+Use **Help → Report a Bug** in Twigpad (or **Help → Request a Feature** for ideas), or
 [open an issue on GitHub](https://github.com/rishabh3354/twigpad/issues/new?labels=bug).
 The menu item fills in your Twigpad, Qt, Python and Linux versions for you.
 

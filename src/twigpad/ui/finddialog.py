@@ -269,6 +269,10 @@ class FindDialog(QDialog):
         pattern = self._pattern()
         if pattern is None or self.win.read_only:
             return 0
+        with self.win.tree.recording("Replace All"):
+            return self._replace_all(pattern)
+
+    def _replace_all(self, pattern) -> int:
         win = self.win
         win._commit_editor()
         titles, text = self._fields()

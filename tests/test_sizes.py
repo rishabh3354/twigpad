@@ -11,6 +11,7 @@ from PyQt5.QtCore import QPoint, QPointF, QSettings, Qt  # noqa: E402
 from PyQt5.QtGui import QFont, QWheelEvent  # noqa: E402
 from PyQt5.QtWidgets import QApplication  # noqa: E402
 
+from twigpad.ui import fonts  # noqa: E402
 from twigpad.ui.mainwindow import MainWindow  # noqa: E402
 
 app = QApplication.instance() or QApplication([])
@@ -88,7 +89,48 @@ class SizeTests(unittest.TestCase):
         self.win.zoom_text("tree", 2)
         self.assertEqual(self.size(self.win.tree), 15)
         self.win.reset_fonts()
-        self.assertEqual(self.size(self.win.tree), QApplication.font().pointSizeF())
+        self.assertEqual(self.size(self.win.tree), fonts.default_font("tree").pointSizeF())
+
+    def test_default_fonts_are_a_little_larger(self):
+        desk = fonts.desktop_font().pointSizeF()
+        self.assertGreaterEqual(self.size(self.win.tree), max(11, desk + 1))
+        self.assertGreaterEqual(self.size(self.win.editor), max(12, desk + 2))
+        self.assertEqual(self.win.tree.font().family(), fonts.default_family())
+
+    def test_tree_icons_follow_tree_zoom(self):
+        tree = self.win.tree
+        self.assertEqual(tree.iconSize().width(), 16)
+        for _ in range(6):
+            self.win.zoom_text("tree", 1)
+        bigger = tree.iconSize().width()
+        self.assertGreater(bigger, 20)
+        self.assertGreaterEqual(tree.indentation(), bigger + 3)
+        self.win.zoom_text("tree", 0)
+        self.assertEqual(tree.iconSize().width(), 16)
+        self.win.zoom_text("tree", -6)
+        self.assertLess(tree.iconSize().width(), 16)
+        self.assertEqual(self.win.settings.value("view/tree_icon_size", 16, type=int), 16)
+
+    def test_fonts_window(self):
+        dlg = self.win.fonts_dialog("tree")
+        dlg.size["tree"].setValue(18)
+        self.assertEqual(self.size(self.win.tree), 18)      # shows at once
+        self.assertGreater(self.win.tree.iconSize().width(), 16)
+        dlg.size["app"].setValue(14)
+        self.assertEqual(QApplication.font().pointSize(), 14)
+        dlg.reject()                                        # Cancel: old fonts back
+        self.assertEqual(self.size(self.win.tree), fonts.default_font("tree").pointSizeF())
+        self.assertEqual(QApplication.font().pointSizeF(), fonts.default_font("app").pointSizeF())
+        dlg = self.win.fonts_dialog("editor")
+        dlg.family["editor"].setCurrentFont(QFont("DejaVu Serif"))
+        dlg.size["editor"].setValue(15)
+        dlg.accept()
+        self.assertEqual(self.size(self.win.editor), 15)
+        self.assertEqual(self.reopen().editor.font().pointSizeF(), 15)
+        dlg = self.win.fonts_dialog()
+        dlg.restore_defaults()
+        dlg.accept()
+        self.assertEqual(self.size(self.win.editor), fonts.default_font("editor").pointSizeF())
 
     def test_tree_icon_size(self):
         tree = self.win.tree

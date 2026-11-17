@@ -30,7 +30,8 @@ LIGHT: Dict[str, str] = {
     "inactive_sel": "#d9e3f5", "inactive_sel_text": "#1d2127", "menu": "#ffffff",
     "tooltip_bg": "#2b3038", "tooltip_fg": "#f3f4f6", "scroll": "#c4cad2",
     "scroll_hover": "#a3abb6", "link": "#1f5fbf", "visited": "#6a3fb5",
-    "disabled": "#a0a6af", "bright": "#c0392b",
+    "disabled": "#a0a6af", "bright": "#c0392b", "danger": "#cf3b2f", "danger_hover": "#b33126",
+    "footer": "#f7f8fa",
 }
 DARK: Dict[str, str] = {
     "window": "#202327", "base": "#181a1d", "alt": "#1d2024", "text": "#e3e6ea",
@@ -39,7 +40,8 @@ DARK: Dict[str, str] = {
     "inactive_sel": "#2f3a48", "inactive_sel_text": "#e3e6ea", "menu": "#25292e",
     "tooltip_bg": "#30353c", "tooltip_fg": "#e3e6ea", "scroll": "#454b53",
     "scroll_hover": "#5c636d", "link": "#7aaefc", "visited": "#b69cf2",
-    "disabled": "#666d76", "bright": "#ff7b72",
+    "disabled": "#666d76", "bright": "#ff7b72", "danger": "#d9453a", "danger_hover": "#e8594e",
+    "footer": "#1b1e21",
 }
 
 STYLE = """
@@ -79,6 +81,14 @@ QPushButton:default { border-color: %(accent)s; }
 QPushButton:disabled { color: %(disabled)s; }
 QPushButton#accent { background: %(accent)s; color: %(accent_text)s; border-color: %(accent)s; }
 QPushButton#accent:hover { background: %(link)s; border-color: %(link)s; }
+QPushButton#danger { background: %(danger)s; color: #ffffff; border-color: %(danger)s; }
+QPushButton#danger:hover { background: %(danger_hover)s; border-color: %(danger_hover)s; }
+QLabel#hint { color: %(subtext)s; }
+QLabel#popup-text { color: %(text)s; }
+QFrame#popup-footer { background: %(footer)s; border-top: 1px solid %(border)s; }
+QPlainTextEdit#popup-details { background: %(alt)s; border: 1px solid %(border)s; border-radius: 6px; }
+QToolButton#popup-toggle { color: %(link)s; border: none; padding: 2px 0; margin: 0; }
+QToolButton#popup-toggle:hover { background: transparent; text-decoration: underline; }
 QToolTip { background: %(tooltip_bg)s; color: %(tooltip_fg)s; border: 1px solid %(border)s; padding: 4px 6px; }
 QScrollBar:vertical { background: transparent; width: 12px; margin: 0; }
 QScrollBar:horizontal { background: transparent; height: 12px; margin: 0; }

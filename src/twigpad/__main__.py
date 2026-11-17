@@ -32,7 +32,7 @@ def dump(path: str, show_text: bool) -> int:
 
 
 def run_gui(path=None) -> int:
-    from PyQt5.QtCore import QSettings, Qt
+    from PyQt5.QtCore import QSettings, Qt, QTimer
     from PyQt5.QtWidgets import QApplication
 
     from .portable import portable_ini
@@ -55,6 +55,7 @@ def run_gui(path=None) -> int:
         win.load_path(path)
     else:
         win.open_startup_file()
+    QTimer.singleShot(1200, win.offer_file_association)
     return app.exec_()
 
 

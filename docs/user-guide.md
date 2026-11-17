@@ -26,6 +26,22 @@ switch panes). The same commands are in the **Node** menu and on right-click.
 | Ctrl+Shift+V | Paste below the selected node |
 | Ctrl+Shift+H | Copy a link to the node (see Links) |
 | Ctrl+Shift+S | Sort the subnodes of the selected node by title |
+| Ctrl+Z | Undo the last change to the tree |
+| Ctrl+Y or Ctrl+Shift+Z | Redo it |
+
+### Undo in the tree
+
+Changes to the tree can be undone, one step at a time: adding, deleting,
+renaming, moving and dragging nodes, cut and paste, sorting, importing,
+**Replace All**, and changing a node's icon or colour. Press **Ctrl+Z** in the
+tree, or use **Edit → Undo**, which names what it will undo ("Undo Delete
+“Projects”"). A deleted node comes back in the same place with everything
+inside it: subnodes, articles, pictures, icons and the branches you had open.
+Adding a node and typing its name counts as one step. Twigpad remembers the
+last 200 changes until you open another file.
+
+In the article, Ctrl+Z undoes typing as before: Undo always works on the pane
+you are in. Right-click in the tree for Undo and Redo too.
 
 **Node → Sort Whole Tree** sorts every level. You can also drag a node onto
 another node (to put it inside) or between two nodes; hold **Shift** while
@@ -161,9 +177,16 @@ Misspelled words are underlined in red. Right-click one for suggestions, or
 Check Spelling**, and choose the dictionary under **Options → Spelling
 Language**. Words in capitals, links and tags are not checked.
 
-Spell checking uses the Hunspell dictionaries installed on your system. To add
-a language, install its dictionary package, for example `hunspell-de-de` on
-Debian and Ubuntu or `hunspell-de` on Fedora.
+To add a language, choose **Options → Spelling Language → Download
+Languages**. Pick one of about 50 languages (English, German, French, Spanish,
+Italian, Portuguese, Russian, Dutch, Polish and many more) and press
+**Download**: the dictionary is installed for you and used right away. The
+same window removes dictionaries you downloaded. They are the free LibreOffice
+and Mozilla dictionaries and are kept in `~/.local/share/hunspell`.
+
+Twigpad also uses any Hunspell dictionaries installed on your system (such as
+the `hunspell-de-de` package). Spell checking needs the Hunspell library
+(`libhunspell`), which most desktops already have.
 
 ## View
 
@@ -171,12 +194,19 @@ Debian and Ubuntu or `hunspell-de` on Fedora.
   are shown; Twigpad remembers the choice.
 - **Expand / Collapse Selected Node** opens or closes one branch, one level or
   all levels deep; **Expand All** and **Collapse All** do the whole tree.
-- Word wrap, and separate fonts for the tree and the article.
+- Word wrap.
+- **Fonts** chooses the font and size of the interface (menus, buttons and
+  windows), the tree and the article, with a preview; changes show at once and
+  **Restore Defaults** goes back to the original fonts. By default Twigpad uses
+  a clean, easy-to-read font (Inter or Noto Sans when installed), with the tree
+  and the article a little larger than the desktop's text. **Reset Fonts**
+  puts back the default fonts and sizes.
 - **Text Size**: **Ctrl+=** (or Ctrl++) makes the text larger and **Ctrl+-**
   smaller in the pane you are in; **Ctrl+0** goes back to the normal size.
   **Ctrl+mouse wheel** over the tree or the article does the same for that
   pane. The menu also has separate items for the tree and the article.
-  Text that has its own size in a formatted note keeps that size.
+  Text that has its own size in a formatted note keeps that size. The tree's
+  note icons grow and shrink with its text.
 - **Tree Icon Size**: Small (the default), Medium, Large or Extra Large note
   icons in the tree; the rows and indentation grow with them.
 - **Classic Tree Look** switches between the classic tree (folder icons,
@@ -284,6 +314,29 @@ expressions. **Find All** lists every match; click one to jump to it.
 - Files are saved in the Windows-compatible encoding when possible, so they
   stay readable by other programs that use the `.hjt` format.
 
+### Moving to a new computer
+
+**File → Backup & Restore → Back Up Notes and Settings** puts your notes files
+(the open file and your recent files; untick any you don't want) and your
+settings into one `.zip` file. Settings include the theme, fonts, toolbars,
+colours, the words you added to the dictionary and the recent files list.
+Password-protected files stay protected.
+
+Copy the `.zip` to the new computer and choose **File → Backup & Restore →
+Restore from Backup**. Twigpad shows where each file will go before it
+changes anything: files go back to the same place in your home folder (or to
+`Documents/Twigpad Restored` when that place doesn't exist there). Files that
+are already on the computer are skipped and never overwritten, so restoring
+twice is harmless. Recent files then point to the restored copies.
+
+### Opening .hjt files from the file manager
+
+**Options → Open .hjt Files with Twigpad** makes double-clicking a `.hjt` or
+`.twig` file open it in Twigpad. Twigpad also offers this once, the first time
+it starts. It only changes settings in your own home folder; to pick another
+app later, right-click a file and use **Open With**. Packages (and the
+Flatpak) set this up when they are installed.
+
 ### Options menu
 
 | Option | Default |
@@ -297,6 +350,11 @@ expressions. **Find All** lists every match; click one to jump to it.
 | Minimize to Tray Instead of the Taskbar | Off |
 | Keep Settings Next to the Program (see Portable use) | Off |
 
+**Options → Reset All Settings to Defaults** puts every option, the theme,
+fonts, text sizes, toolbars, colours and the window layout back to how they
+were when Twigpad was installed, after asking first. Your notes files, the
+recent files list and the words you added to the dictionary are kept.
+
 ### Portable use
 
 To run Twigpad from a USB stick, turn on **Options → Keep Settings Next to
@@ -307,10 +365,14 @@ back and deletes the file.
 
 ## Help menu
 
+- **Keyboard Shortcuts** (F1 or Ctrl+/) lists every shortcut, grouped by
+  menu, with a search box.
 - **Report a Bug** opens a new issue on Twigpad's GitHub page in your web
   browser. The form already lists your Twigpad, Qt, Python and Linux versions;
   describe what went wrong and submit it (you need a GitHub account). Nothing
   is sent until you submit it yourself.
+- **Request a Feature** opens a new GitHub issue with a short form for your
+  idea.
 - **Support the Developer (Donate)** opens a PayPal page to support Twigpad.
 - **More Apps by Warlord Softwares** lists other Linux apps by the same developer.
 - **About the Developer** opens the developer's web page.

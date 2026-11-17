@@ -94,6 +94,12 @@ ICONS: Dict[str, str] = {
            '<rect x="7" y="8.5" width="10" height="11.5" rx="5"/>'
            '<path stroke="{red}" d="M12 12v8M3.5 13H7M17 13h3.5M4.5 8.5l2.8 1.8M19.5 8.5l-2.8 1.8'
            'M4.5 19l2.9-1.8M19.5 19l-2.9-1.8M9.5 4.5L8 3M14.5 4.5L16 3"/>',
+    "idea": '<path d="M9 18h6M10 21h4"/>'
+            '<path stroke="{amber}" fill="{amber_soft}" d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2'
+            'c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
+    "keyboard": '<rect x="2.5" y="6" width="19" height="12" rx="2.2"/>'
+                '<path d="M6 10h.01M9.3 10h.01M12.6 10h.01M15.9 10h.01M18 10h.01M6 13.5h.01M18 13.5h.01"'
+                ' stroke-width="2.2"/><path stroke="{blue}" d="M8.5 14.5h7"/>',
     "unfocus": '<path d="M15 3h6v6M9 21H3v-6"/><path stroke="{blue}" d="M21 3l-7 7M3 21l7-7"/>',
 }
 

@@ -67,7 +67,26 @@ All notable changes to Twigpad are listed here. The format follows
 - View → Theme: polished Light and Dark themes, Automatic (follows the
   desktop's light or dark setting, the default) and Desktop Style.
 - Help → Report a Bug opens a new GitHub issue with the app and system
-  versions filled in; the About window links to it too.
+  versions filled in; the About window links to it too. Help → Request a
+  Feature opens one for ideas.
+- Undo and redo for the tree (Ctrl+Z / Ctrl+Y in the tree, Edit menu and
+  right-click menu): adding, deleting, renaming, moving and dragging nodes,
+  cut and paste, sorting, importing, Replace All and icon changes. A deleted
+  branch comes back in place with its subnodes, articles and open branches.
+  Edit → Undo names the step it will undo.
+- Help → Keyboard Shortcuts (F1, Ctrl+/): every shortcut, grouped by menu,
+  with a search box.
+- File → Backup & Restore: back up notes files and settings into one .zip and
+  restore them on another computer; files already there are skipped.
+- Options → Spelling Language → Download Languages: about 50 dictionaries
+  to download with one click; the menu shows language names.
+- View → Fonts: interface, tree and article fonts and sizes with a live
+  preview. A clean default font (Inter or Noto Sans) and slightly larger
+  default text.
+- Options → Open .hjt Files with Twigpad (also offered once at first start)
+  makes the file manager open .hjt and .twig files in Twigpad.
+- Options → Reset All Settings to Defaults (notes, recent files and
+  dictionary words are kept).
 - Help → Support the Developer (Donate), More Apps by Warlord Softwares and
   About the Developer; a new About window with the same links.
 - View → Colours: background and text colours for the tree and the article.
@@ -113,6 +132,11 @@ All notable changes to Twigpad are listed here. The format follows
   file when pressed in the tree.
 - One fixed toolbar became five movable ones; Cut and Copy are always enabled.
 - The desktop entry, icon and AppStream id are now `com.warlordsoftwares.twigpad`.
+- Messages and questions use Twigpad's own windows: a clear heading, an icon,
+  buttons named for what they do (Delete, Don't Save, Reload) and light and
+  dark theme colours. Password prompts use the same style.
+- View → Article Font and Tree Font became one Fonts window.
 
 ### Fixed
 - The box for renaming a node in the tree no longer cuts off the bottom of the title.
+- Zooming the tree with Ctrl+mouse wheel now also resizes the note icons.

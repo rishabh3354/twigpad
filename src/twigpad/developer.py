@@ -47,6 +47,15 @@ def bug_report_url(info: Dict[str, str]) -> str:
     return ISSUES_URL + "/new?" + urlencode({"labels": "bug", "body": body})
 
 
+def feature_request_url(info: Dict[str, str]) -> str:
+    """A new GitHub issue for an idea, with a short form filled in."""
+    body = ("**What would you like Twigpad to do?**\n\n\n"
+            "**How would it help you?**\n\n\n"
+            "**Anything else?** (examples, other apps that do it, screenshots)\n\n\n"
+            f"_Twigpad {info.get('Twigpad', '')} on {info.get('OS', 'Linux')}_\n")
+    return ISSUES_URL + "/new?" + urlencode({"labels": "enhancement", "body": body})
+
+
 class App(NamedTuple):
     name: str
     summary: str

@@ -358,6 +358,10 @@ class TreeDelegate(QStyledItemDelegate):
                                  "border-radius: 3px; }")
         return editor
 
+    def setModelData(self, editor, model, index) -> None:
+        with self.tree.recording("Rename"):   # so a rename can be undone
+            super().setModelData(editor, model, index)
+
     def updateEditorGeometry(self, editor, option, index) -> None:
         r = option.rect
         if self.tree.classic:
