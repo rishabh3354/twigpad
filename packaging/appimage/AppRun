@@ -7,6 +7,9 @@ export APPDIR="${APPDIR:-$HERE}"
 unset PYTHONHOME PYTHONPATH QT_PLUGIN_PATH QML2_IMPORT_PATH
 export PYTHONNOUSERSITE=1
 export PYTHONDONTWRITEBYTECODE=1
+# X11 window class "twigpad", as with the pip and snap installs (Qt would take
+# it from argv[0], which is __main__.py here).
+export RESOURCE_NAME="${RESOURCE_NAME:-twigpad}"
 
 # The bundled OpenSSL looks for CA certificates in /etc/ssl; point it at the
 # host's bundle wherever this distribution keeps it (for dictionary downloads).
