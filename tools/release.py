@@ -31,6 +31,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIST = os.path.join(ROOT, "dist")
 APPIMAGE_SCRIPT = os.path.join(ROOT, "packaging", "appimage", "build-appimage.sh")
 SNAP_NAME = "twigpad"
+REPO_URL = "https://github.com/rishabh3354/twigpad"
+# Each release also carries the AppImage under this fixed name, so the link
+# .../releases/latest/download/Twigpad-x86_64.AppImage always gives the newest one.
+APPIMAGE_LATEST = "Twigpad-x86_64.AppImage"
+APPIMAGE_LATEST_URL = f"{REPO_URL}/releases/latest/download/{APPIMAGE_LATEST}"
 CHANNELS = ("stable", "candidate", "beta", "edge")
 
 
@@ -223,8 +228,20 @@ class Release:
         self.say(f"Uploading the snap to the {self.args.channel} channel")
         self.run(["snapcraft", "upload", f"--release={self.args.channel}", self.snap_file])
 
+    def latest_copy(self) -> str:
+        """The same AppImage under the fixed name (a copy in dist/)."""
+        path = os.path.join(DIST, APPIMAGE_LATEST)
+        if self.args.dry_run:
+            self.say(f"   would copy {os.path.basename(self.appimage_file)} to {APPIMAGE_LATEST}")
+        else:
+            shutil.copyfile(self.appimage_file, path)
+            os.chmod(path, 0o755)
+        return path
+
     def upload_appimage(self) -> None:
-        files = [self.appimage_file]
+        files = [self.appimage_file, self.latest_copy()]
+        # One .zsync for both: the update information inside the AppImage looks
+        # for Twigpad-*-x86_64.AppImage.zsync, the versioned file's.
         zsync = self.appimage_file + ".zsync"
         if os.path.isfile(zsync) or self.args.dry_run:   # appimagetool writes it beside the AppImage
             files.append(zsync)
@@ -235,7 +252,10 @@ class Release:
             return
         self.say(f"Creating the GitHub release {self.tag} with the AppImage")
         notes = release_notes(self.version) or (
-            f"See [CHANGELOG.md](https://github.com/rishabh3354/twigpad/blob/{self.tag}/CHANGELOG.md).")
+            f"See [CHANGELOG.md]({REPO_URL}/blob/{self.tag}/CHANGELOG.md).")
+        notes += (f"\n\n**AppImage:** download `{os.path.basename(self.appimage_file)}`, or "
+                  f"`{APPIMAGE_LATEST}` (the same file). The link {APPIMAGE_LATEST_URL} "
+                  "always gives the newest release.")
         with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as fh:
             fh.write(notes + "\n")
         try:
@@ -248,6 +268,14 @@ class Release:
             self.run(cmd + files)
         finally:
             os.unlink(fh.name)
+        if self.args.channel != "stable":
+            self.say(f"   ! a pre-release: {APPIMAGE_LATEST_URL} keeps giving the last full release")
+
+    def report_links(self) -> None:
+        if self.upload and self.do_appimage:
+            self.say(f"AppImage links: {REPO_URL}/releases/download/{self.tag}/"
+                     f"{os.path.basename(self.appimage_file)}")
+            self.say(f"                {APPIMAGE_LATEST_URL}  (always the newest)")
 
     def main(self) -> None:
         self.preflight()
@@ -262,6 +290,7 @@ class Release:
                 self.upload_snap()
             if self.do_appimage:
                 self.upload_appimage()
+        self.report_links()
         if not self.args.dry_run:
             self.say("Done.")
         elif self.problems:

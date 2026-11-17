@@ -145,7 +145,9 @@ rm -rf "$STDLIB"/{test,idlelib,tkinter,turtledemo,ensurepip,lib2to3} "$STDLIB"/c
        "$APPDIR"/usr/python/include "$APPDIR"/usr/python/share \
        "$STDLIB"/lib-dynload/_tkinter* "$SITE"/pip "$SITE"/pip-*.dist-info \
        "$SITE/PyQt5/Qt5/qml" "$SITE/PyQt5/bindings" "$SITE/PyQt5/uic"
-rm -f "$APPDIR"/usr/python/bin/{idle3*,pip*,pydoc3*,2to3*}
+# Also PyQt5's developer tools: Twigpad does not use them, and pip writes the
+# build folder into their first line.
+rm -f "$APPDIR"/usr/python/bin/{idle3*,pip*,pydoc3*,2to3*,pyuic5,pylupdate5,pyrcc5}
 for mod in "${UNUSED_QT[@]}"; do
     rm -f "$QTLIB/libQt5$mod.so"* "$SITE/PyQt5/Qt$mod".*.so "$SITE/PyQt5/Qt$mod".pyi
 done
@@ -165,7 +167,12 @@ done < <(find "$SITE/PyQt5" "$APPDIR/usr/lib" -name '*.so*' -type f)
 [ "$missing" = 0 ] || die "some libraries are missing (see above)"
 
 step "Byte-compiling"
-"$PY" -s -m compileall -q -j 0 --invalidation-mode unchecked-hash "$STDLIB" >/dev/null || true
+# -s/-p: record /usr/python/... as the source path, not this machine's build folder.
+"$PY" -s -m compileall -q -j 0 --invalidation-mode unchecked-hash -s "$APPDIR" -p / "$STDLIB" >/dev/null || true
+if grep -rlaF "$ROOT" "$APPDIR" >/dev/null 2>&1; then
+    grep -rlaF "$ROOT" "$APPDIR" | sed "s|$APPDIR/|  |" | head >&2
+    die "the files above contain this machine's build path ($ROOT)"
+fi
 
 # --- desktop integration ----------------------------------------------------
 step "Adding the menu entry, icon, file types and AppStream metadata"

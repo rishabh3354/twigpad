@@ -133,8 +133,13 @@ python3 tools/release.py --channel stable           # build both, then upload af
 The snap goes to the Snap Store with `snapcraft upload --release=<channel>`; the
 AppImage and its `.zsync` update file go to the GitHub release `v<version>`
 (created with `gh release create` if it does not exist yet, added to with
-`gh release upload` if it does). No credentials are kept in the repository: the
-script uses the `snapcraft login` and `gh auth` logins of the machine it runs on.
+`gh release upload` if it does). The AppImage goes up twice, as
+`Twigpad-<version>-x86_64.AppImage` and as `Twigpad-x86_64.AppImage`, so
+<https://github.com/rishabh3354/twigpad/releases/latest/download/Twigpad-x86_64.AppImage>
+always downloads the newest full release (GitHub's "latest" skips pre-releases,
+so release AppImages with `--channel stable`). No credentials are kept in the
+repository: the script uses the `snapcraft login` and `gh auth` logins of the
+machine it runs on.
 
 To build one package by hand: `snapcraft pack` in the repository root, or
 `packaging/appimage/build-appimage.sh` (output in `dist/`).

@@ -30,3 +30,20 @@ prime/
 
 # Backups the app writes next to files you test with
 *.hjt.bak
+
+# Credentials: never commit these. Releases use the snapcraft and gh logins
+# kept outside the repository (see CONTRIBUTING.md).
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+.netrc
+.pypirc
+*credentials*
+*.login
+snapcraft-login*
+store-credentials*

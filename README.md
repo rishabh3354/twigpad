@@ -139,14 +139,17 @@ If you have used other two-pane outliners such as **KeyNote NF**, **NoteCase**,
 
 ### AppImage (any Linux distribution)
 
-Download `Twigpad-<version>-x86_64.AppImage` from the
-[latest release](https://github.com/rishabh3354/twigpad/releases/latest), make it
-executable and start it:
+[Download the latest AppImage](https://github.com/rishabh3354/twigpad/releases/latest/download/Twigpad-x86_64.AppImage)
+(this link always gives the newest version), make it executable and start it:
 
 ```bash
-chmod +x Twigpad-*-x86_64.AppImage
-./Twigpad-*-x86_64.AppImage
+curl -LO https://github.com/rishabh3354/twigpad/releases/latest/download/Twigpad-x86_64.AppImage
+chmod +x Twigpad-x86_64.AppImage
+./Twigpad-x86_64.AppImage
 ```
+
+Each version is also on the [releases page](https://github.com/rishabh3354/twigpad/releases)
+as `Twigpad-<version>-x86_64.AppImage`.
 
 It brings its own Python, Qt, PyCryptodome and Hunspell spell checker, and runs
 without FUSE 2. To open `.hjt` and `.twig` files by double-clicking them, choose
