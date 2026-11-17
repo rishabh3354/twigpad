@@ -25,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from typing import List, Optional
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -87,6 +88,7 @@ class Release:
         self.build = not args.upload_only
         self.upload = not args.no_upload
         self.problems: List[str] = []
+        self.started = time.time()
 
     # --- running commands ---------------------------------------------------
     def say(self, text: str) -> None:
@@ -203,12 +205,23 @@ class Release:
     def build_snap(self) -> None:
         self.say("Building the snap (snapcraft, in LXD)")
         os.makedirs(DIST, exist_ok=True)
-        self.run(["snapcraft", "pack", "--output", self.snap_file])
+        # Relative to the project: snapcraft packs inside LXD, where the project
+        # is mounted elsewhere, so an absolute path would land in the container.
+        self.run(["snapcraft", "pack", "--output", os.path.relpath(self.snap_file, ROOT)])
+        self.check_fresh(self.snap_file)
+
+    def check_fresh(self, path: str) -> None:
+        """Stop if a build did not write its file (never upload an old one)."""
+        if self.args.dry_run:
+            return
+        if not os.path.isfile(path) or os.path.getmtime(path) < self.started:
+            raise Stop(f"the build finished but did not write {os.path.relpath(path, ROOT)}")
 
     def build_appimage(self) -> None:
         self.say("Building the AppImage")
         os.makedirs(DIST, exist_ok=True)
         self.run(["bash", APPIMAGE_SCRIPT, DIST])
+        self.check_fresh(self.appimage_file)
 
     def confirm_upload(self) -> None:
         if self.args.dry_run or self.args.yes:
