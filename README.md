@@ -53,7 +53,7 @@ to start, simple to use, and built to last.
 - **Your notes in one file.** A notebook is a single `.hjt` file (plain text) or `.twig` file (with formatting and pictures): easy to back up, sync and keep for decades.
 - **Recovers what others can't.** Opens backup copies (`.bak`, `.hjt~`), zipped backups and damaged or truncated files, and saves everything it can.
 - **Merge notebooks.** Combine several files or old backups into one tree.
-- **Safe by default.** Keeps a backup copy when you save, writes files atomically, optional auto-save.
+- **Safe by default.** Keeps a backup copy when you save, writes files atomically, recovers unsaved changes after a crash or power cut, optional auto-save.
 - **Export and print.** Export a note, a branch or the whole notebook as a text outline or an HTML web page, save a branch as its own file, or print it.
 - **Import anything.** Text files (several at once), CSV files (a note per row), other tree files and backups.
 - **Clean up pasted text.** UPPERCASE, lowercase, and removing indentation, quote marks and hard line breaks from pasted email.

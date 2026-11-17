@@ -314,6 +314,17 @@ expressions. **Find All** lists every match; click one to jump to it.
 - Files are saved in the Windows-compatible encoding when possible, so they
   stay readable by other programs that use the `.hjt` format.
 
+### Crash recovery
+
+While a file has unsaved changes, Twigpad quietly keeps a recovery copy of it,
+updated every 30 seconds. If Twigpad crashes or the computer loses power, the
+next start asks **Recover unsaved changes?**: **Recover** opens the changes
+(Save then writes them to the original file), **Not Now** keeps the copy for
+the next start, and **Discard Changes** deletes it. Saving, or closing the
+window normally, deletes the copy. Copies of password-protected files stay
+encrypted with the file's password. They are kept in
+`~/.local/state/twigpad/recovery` (next to `twigpad.ini` in portable use).
+
 ### Moving to a new computer
 
 **File → Backup & Restore → Back Up Notes and Settings** puts your notes files

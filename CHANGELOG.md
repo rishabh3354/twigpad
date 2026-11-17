@@ -76,6 +76,9 @@ All notable changes to Twigpad are listed here. The format follows
   Edit → Undo names the step it will undo.
 - Help → Keyboard Shortcuts (F1, Ctrl+/): every shortcut, grouped by menu,
   with a search box.
+- Crash recovery: unsaved changes are copied every 30 seconds and offered
+  back at the next start after a crash or power cut (encrypted for
+  password-protected files).
 - File → Backup & Restore: back up notes files and settings into one .zip and
   restore them on another computer; files already there are skipped.
 - Options → Spelling Language → Download Languages: about 50 dictionaries

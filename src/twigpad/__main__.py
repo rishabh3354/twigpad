@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from . import APP_ID, APP_NAME, DESKTOP_ID, __version__, hjt
@@ -49,11 +50,14 @@ def run_gui(path=None) -> int:
     from .ui.mainwindow import MainWindow
     app.setWindowIcon(app_icon())
     ini = portable_ini()
+    if ini:   # portable: keep crash-recovery copies on the stick, not on this computer
+        from . import recovery
+        recovery.FOLDER = os.path.join(os.path.dirname(ini), f"{APP_ID}-recovery")
     win = MainWindow(QSettings(ini, QSettings.IniFormat) if ini else None)
     win.show()
     if path:
         win.load_path(path)
-    else:
+    elif not win.check_recovery():
         win.open_startup_file()
     QTimer.singleShot(1200, win.offer_file_association)
     return app.exec_()

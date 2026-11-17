@@ -23,7 +23,7 @@ from PyQt5.QtWidgets import (
 )
 
 from .. import (
-    APP_ID, APP_NAME, __version__, developer, export, hjt, importers, links, portable, search, spell,
+    APP_ID, APP_NAME, __version__, developer, export, hjt, importers, links, portable, recovery, search, spell,
     tags, textfmt, twig,
 )
 from ..model import Document, Node
@@ -72,6 +72,8 @@ def _and_list(words: List[str]) -> str:
 
 class MainWindow(QMainWindow):
     def __init__(self, settings: Optional[QSettings] = None):
+        self._recovery_id = recovery.new_id()   # this window's crash-recovery copy
+        self._recovery_dirty = False              # changed since the last copy was written
         super().__init__()
         self.settings = settings or QSettings(APP_ID, APP_ID)
         self.path: Optional[str] = None       # where Save writes; None = ask
@@ -135,6 +137,10 @@ class MainWindow(QMainWindow):
         self.info_timer.setSingleShot(True)
         self.info_timer.setInterval(250)
         self.info_timer.timeout.connect(self.refresh_info)
+        self.recovery_timer = QTimer(self)    # crash-recovery copy of unsaved changes
+        self.recovery_timer.setInterval(recovery.INTERVAL_MS)
+        self.recovery_timer.timeout.connect(self.write_recovery)
+        self.recovery_timer.start()
         self.watcher = QFileSystemWatcher(self)
         self.disk_timer = QTimer(self)
         self.disk_timer.setSingleShot(True)
@@ -1221,6 +1227,82 @@ class MainWindow(QMainWindow):
         self.setWindowModified(True)
         self._update_tab_titles()
         self.info_timer.start()
+
+    # ====================================================== crash recovery
+
+    def setWindowModified(self, on: bool) -> None:
+        super().setWindowModified(on)
+        if on:
+            self._recovery_dirty = True
+        else:   # saved, or a new or freshly opened file: no recovery copy needed
+            self._recovery_dirty = False
+            self._drop_recovery()
+
+    def _drop_recovery(self) -> None:
+        recovery.remove(self._recovery_id)
+
+    def _display_name(self) -> str:
+        return os.path.basename(self.path) if self.path else (self.source_name or "Untitled")
+
+    def write_recovery(self) -> bool:
+        """Keep a copy of unsaved changes, in case Twigpad or the computer
+        stops before they are saved. Password-protected files stay encrypted."""
+        if not (self._recovery_dirty and self.isWindowModified()):
+            return False
+        try:
+            data = twig.serialize(self._current_document())
+            recovery.write(self._recovery_id, data, self.path, self._display_name())
+        except (OSError, ValueError):
+            return False   # never interrupt work for this; try again next time
+        self._recovery_dirty = False
+        return True
+
+    def check_recovery(self) -> bool:
+        """At start: offer back the changes a crashed Twigpad did not save.
+        Returns True when they were opened."""
+        entries = recovery.pending()
+        if not entries:
+            return False
+        entry = entries[0]
+        when = QLocale().toString(QDateTime.fromString(entry.saved, Qt.ISODate), QLocale.ShortFormat)
+        more = len(entries) - 1
+        extra = f" {more} more {'copies are' if more > 1 else 'copy is'} kept for the next start." if more else ""
+        answer = popups.show(
+            self, popups.WARNING, "Recover unsaved changes?",
+            f"{APP_NAME} was closed unexpectedly while \"{entry.name}\" had changes that were not "
+            f"saved. A copy from {when} was kept. Open it to check it, then save it.{extra}",
+            (("discard", "Discard Changes", popups.NORMAL), ("later", "Not Now", popups.CANCEL),
+             ("recover", "Recover", popups.PRIMARY)), "recover")
+        if answer == "discard":
+            if popups.confirm(self, "Discard the unsaved changes?",
+                              f"The recovered copy of \"{entry.name}\" will be deleted.",
+                              ok="Discard", danger=True, kind=popups.WARNING, default_ok=False):
+                recovery.remove(entry.id)
+            return False
+        if answer != "recover":
+            return False
+        return self.recover(entry)
+
+    def recover(self, entry: "recovery.Entry") -> bool:
+        doc = self._read_tree_file(entry.data_path)
+        if doc is None:
+            return False
+        if not doc.top_nodes:
+            doc.root.add_child(Node(NEW_FILE_TITLE))
+        self._set_document(doc)
+        original = entry.original if entry.original and os.path.isdir(os.path.dirname(entry.original)) else None
+        self.path = original
+        self.source_name = "" if original else entry.name
+        self.encoding = "cp1252"
+        self._watch(original)
+        self.set_read_only(False)
+        self.setWindowModified(True)
+        self._update_title()
+        self.write_recovery()          # this window's own copy, before the old one goes
+        recovery.remove(entry.id)
+        self.statusBar().showMessage(
+            f"Recovered the unsaved changes of {entry.name}. Check them, then save.", 10000)
+        return True
 
     # ========================================================= tree undo
 
@@ -3668,6 +3750,8 @@ class MainWindow(QMainWindow):
             self._watch(None)
             self.disk_timer.stop()
             self.info_timer.stop()
+            self.recovery_timer.stop()
+            self._drop_recovery()   # closed on purpose: the copy is not needed
             self._save_settings()
             if self._find_dialog is not None:
                 self._find_dialog.close()
