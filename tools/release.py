@@ -239,7 +239,9 @@ class Release:
         with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as fh:
             fh.write(notes + "\n")
         try:
-            cmd = ["gh", "release", "create", self.tag, "--verify-tag", "--title", f"Twigpad {self.version}",
+            # preflight() made sure the tag is on GitHub, so gh uses it rather than
+            # tagging main (gh 2.4 in Ubuntu 22.04 has no --verify-tag).
+            cmd = ["gh", "release", "create", self.tag, "--title", f"Twigpad {self.version}",
                    "--notes-file", fh.name]
             if self.args.channel != "stable":
                 cmd.append("--prerelease")
