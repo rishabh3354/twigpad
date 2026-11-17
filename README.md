@@ -137,6 +137,35 @@ If you have used other two-pane outliners such as **KeyNote NF**, **NoteCase**,
 
 ## Install
 
+### AppImage (any Linux distribution)
+
+Download `Twigpad-<version>-x86_64.AppImage` from the
+[latest release](https://github.com/rishabh3354/twigpad/releases/latest), make it
+executable and start it:
+
+```bash
+chmod +x Twigpad-*-x86_64.AppImage
+./Twigpad-*-x86_64.AppImage
+```
+
+It brings its own Python, Qt, PyCryptodome and Hunspell spell checker, and runs
+without FUSE 2. To open `.hjt` and `.twig` files by double-clicking them, choose
+**Options → Open .hjt Files with Twigpad** (or add the AppImage with
+AppImageLauncher or Gear Lever). Put an empty `twigpad.ini` beside the AppImage
+to keep the settings there, for running from a USB stick.
+
+### Snap
+
+```bash
+sudo snap install twigpad
+```
+
+The snap can open notes in your home folder. For notes on USB sticks and other
+drives, allow it once with `sudo snap connect twigpad:removable-media`. To open
+`.hjt` files from the file manager, right-click one and use **Open With**.
+
+### With pip
+
 Twigpad needs Python 3.8+ and PyQt5. Password protection also needs
 PyCryptodome (`pip install` adds it; on Debian or Ubuntu it is the
 `python3-pycryptodome` package).
@@ -147,8 +176,6 @@ cd twigpad
 pip install --user .
 twigpad
 ```
-
-**AppImage and Snap packages are coming soon.**
 
 To run it from the source folder without installing:
 
@@ -195,7 +222,8 @@ Press <kbd>F1</kbd> in Twigpad for the full list with a search box. All keys and
 ### How do I open `.hjt` files on Linux?
 
 Install Twigpad and open the file with **File → Open**, or run `twigpad file.hjt`.
-To open `.hjt` files by double-clicking them, choose **Options → Open .hjt Files with Twigpad**.
+To open `.hjt` files by double-clicking them, choose **Options → Open .hjt Files with Twigpad**
+(with the snap, right-click a file and use **Open With** instead).
 
 ### Can I use my TreePad Lite files on Linux without Wine?
 

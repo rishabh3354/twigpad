@@ -1070,7 +1070,8 @@ class MainWindow(QMainWindow):
     def offer_file_association(self) -> None:
         """Once, after the first start: offer to open .hjt files with Twigpad."""
         from .. import desktop
-        if self.settings.value("options/file_types_asked", False, type=bool) or desktop.in_flatpak():
+        if (self.settings.value("options/file_types_asked", False, type=bool)
+                or desktop.in_flatpak() or desktop.in_snap()):
             return
         self.settings.setValue("options/file_types_asked", True)
         if desktop.is_default():

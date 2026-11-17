@@ -78,6 +78,67 @@ It draws the real window at twice the normal size on Qt's VNC platform (a
 large virtual screen; its server listens on a local port only while the script
 runs) and adds a title bar, rounded corners and a shadow.
 
+## Packaging and releases
+
+The Snap and the AppImage are built from these files:
+
+| Path | Contents |
+|---|---|
+| `snap/snapcraft.yaml` | Snap recipe: core22, the GNOME extension, PyQt5 and PyCryptodome from PyPI, Hunspell with US English |
+| `packaging/appimage/build-appimage.sh` | AppImage build: a standalone Python, the pinned wheels, Hunspell and the xcb libraries, packed by appimagetool |
+| `packaging/appimage/requirements.txt` | The Python packages in the AppImage, pinned with their SHA-256 sums |
+| `packaging/appimage/AppRun` | Starts Twigpad inside the AppImage |
+| `tools/release.py` | Builds both and uploads them |
+
+Both use the desktop entry, AppStream metadata and MIME types in `data/` and
+the icon `src/twigpad/resources/twigpad.svg`. The AppImage build pins every
+download (Python, appimagetool, its runtime and the wheels) by version and
+checksum, so the same commit gives the same AppImage; it runs on Debian or
+Ubuntu, since the Hunspell and xcb libraries come from that system's packages.
+Release AppImages are built on Ubuntu 22.04, the oldest system they support.
+
+What the release machine needs (the script stops and says what is missing):
+
+```bash
+sudo snap install snapcraft --classic
+sudo snap install lxd && sudo lxd init --auto && sudo usermod -aG lxd $USER   # snapcraft builds in LXD
+sudo apt install curl file gh
+snapcraft login            # once; the Snap Store login stays on this machine
+gh auth login              # once
+snapcraft register twigpad # once, to own the snap name
+```
+
+To make a release:
+
+1. Set the new version in `src/twigpad/__init__.py` (`pyproject.toml` reads it
+   from there) and move the `[Unreleased]` notes in `CHANGELOG.md` under
+   `## [<version>]`; that section becomes the GitHub release notes.
+2. Commit, then tag and push the tag: `git tag -a v<version> -m "Twigpad <version>" && git push origin v<version>`.
+3. Check that everything is in place, then build and upload:
+
+```bash
+python3 tools/release.py --dry-run                  # checks tools, logins and the tag; builds nothing
+python3 tools/release.py --channel stable           # build both, then upload after asking
+```
+
+| Option | Effect |
+|---|---|
+| `--snap-only` / `--appimage-only` | Build and upload only one package |
+| `--no-upload` | Build into `dist/` only |
+| `--upload-only` | Upload what is already in `dist/` |
+| `--channel stable\|candidate\|beta\|edge` | Snap Store channel (default `edge`); anything but `stable` also marks the GitHub release as a pre-release |
+| `--dry-run` | Print the checks and the commands without building or uploading |
+| `--yes` | Upload without asking first |
+
+The snap goes to the Snap Store with `snapcraft upload --release=<channel>`; the
+AppImage and its `.zsync` update file go to the GitHub release `v<version>`
+(created with `gh release create` if it does not exist yet, added to with
+`gh release upload` if it does). No credentials are kept in the repository: the
+script uses the `snapcraft login` and `gh auth` logins of the machine it runs on.
+
+To build one package by hand: `snapcraft pack` in the repository root, or
+`packaging/appimage/build-appimage.sh` (output in `dist/`).
+
 ## Layout
 
 | Path | Contents |
@@ -87,8 +148,9 @@ runs) and adds a title bar, rounded corners and a shadow.
 | `src/twigpad/search.py`, `links.py`, `export.py`, `model.py`, `rtf.py` | Core logic (no Qt) |
 | `src/twigpad/ui/` | Qt widgets: main window, tree, find dialog, link highlighter, icons |
 | `src/twigpad/resources/` | Files shipped inside the package (app icon, translations in `i18n/`) |
-| `tools/` | Developer scripts (`i18n_strings.py` checks the translations, `store_screenshots.py` makes the store screenshots) |
+| `tools/` | Developer scripts (`i18n_strings.py` checks the translations, `store_screenshots.py` makes the store screenshots, `release.py` builds and publishes the packages) |
 | `data/` | Desktop integration: `.desktop` entry, AppStream metadata, MIME type |
+| `snap/`, `packaging/appimage/` | Snap and AppImage recipes |
 | `docs/` | User guide and file format notes |
 | `tests/` | Unit tests and sample files |
 

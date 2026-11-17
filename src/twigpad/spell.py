@@ -29,8 +29,14 @@ DICT_DIRS = [
     "/usr/local/share/hunspell",
     "/app/share/hunspell",          # Flatpak
 ]
+# Snap and AppImage packages bring their own Hunspell library and dictionaries.
+_BUNDLE_ROOTS = [os.environ[name] for name in ("SNAP", "APPDIR") if os.environ.get(name)]
+DICT_DIRS += [os.path.join(root, "usr", "share", "hunspell") for root in _BUNDLE_ROOTS]
 _LIB_NAMES = ["libhunspell-1.7.so.0", "libhunspell-1.6.so.0", "libhunspell.so",
               "libhunspell-1.7.dylib", "libhunspell-1.7-0.dll"]
+_LIB_NAMES = [path for root in _BUNDLE_ROOTS
+              for path in sorted(glob.glob(os.path.join(root, "usr", "lib", "*", "libhunspell-1.*.so.0")))
+              ] + _LIB_NAMES
 
 # A word: letters, optionally joined by an apostrophe (don't, l'eau).
 WORD_RE = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*")

@@ -132,6 +132,10 @@ All notable changes to Twigpad are listed here. The format follows
   menu.
 - Five store screenshots (`docs/screenshots/store/`), listed in the metainfo
   file, and `tools/store_screenshots.py` to make them again.
+- Snap (`snap/snapcraft.yaml`) and AppImage (`packaging/appimage/`) packages,
+  both with the Hunspell spell checker and a US English dictionary, and
+  `tools/release.py` to build them and publish them to the Snap Store and
+  GitHub releases.
 
 ### Changed
 - A file has exactly one top node, as the `.hjt` format requires. Files with

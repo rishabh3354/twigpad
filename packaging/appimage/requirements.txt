@@ -1,0 +1,12 @@
+# Python packages bundled in the AppImage (x86_64, CPython 3.12), pinned with
+# their PyPI SHA-256 sums so every build gets the same files. To update: change
+# a version, then take the new sum from https://pypi.org/project/<name>/#files
+# (the manylinux x86_64 wheel), or run `pip download` + `pip hash`.
+PyQt5==5.15.11 \
+    --hash=sha256:cd672a6738d1ae33ef7d9efa8e6cb0a1525ecf53ec86da80a9e1b6ec38c8d0f1
+PyQt5-Qt5==5.15.19 \
+    --hash=sha256:31421d9c31fb29a8faee4b8b3c32658fb51a9e8c4c708075121162fa44faf80e
+PyQt5-sip==12.20.1 \
+    --hash=sha256:b3df856ad5cb8399c52997ec67074e0295d7bcd2b35199fa0e6387f7c609e08a
+pycryptodome==3.24.1 \
+    --hash=sha256:93619c3117a8f14ea1267b427e465d152a66c89c3d3c643262070c05b2855aae

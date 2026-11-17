@@ -1,0 +1,11 @@
+#!/bin/sh
+# Starts Twigpad in the snap, after the GNOME extension's desktop-launch.
+#
+# desktop-launch sets QT_QPA_PLATFORM=wayland-egl whenever a Wayland session is
+# running. Qt 5 itself keeps away from native Wayland on GNOME (no title bars
+# there) and uses XWayland; let it choose, as it does outside the snap.
+unset QT_QPA_PLATFORM
+# desktop-launch also puts the GNOME platform's Python packages on PYTHONPATH;
+# Twigpad only needs the snap's own.
+unset PYTHONPATH
+exec "$SNAP/bin/twigpad" "$@"

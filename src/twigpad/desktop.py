@@ -38,6 +38,12 @@ def in_flatpak() -> bool:
     return bool(os.environ.get("FLATPAK_ID")) or os.path.exists("/.flatpak-info")
 
 
+def in_snap() -> bool:
+    """A snap cannot register file types: snapd adds its menu entry, and
+    file managers offer Twigpad under Open With."""
+    return bool(os.environ.get("SNAP_NAME"))
+
+
 def _quote(arg: str) -> str:
     """Quote an Exec argument the way desktop entries want it."""
     if arg and all(c.isalnum() or c in "/._-+=:," for c in arg):

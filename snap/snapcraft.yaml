@@ -1,0 +1,113 @@
+# Snap package of Twigpad. Build with `snapcraft` (or `python3 tools/release.py --snap-only`)
+# from the repository root; see CONTRIBUTING.md.
+name: twigpad
+title: Twigpad
+base: core22
+adopt-info: twigpad          # version from twigpad.__version__; summary and description from the metainfo
+grade: stable
+confinement: strict
+license: GPL-3.0-or-later
+icon: src/twigpad/resources/twigpad.svg
+website: https://github.com/rishabh3354/twigpad
+source-code: https://github.com/rishabh3354/twigpad
+issues: https://github.com/rishabh3354/twigpad/issues
+contact: https://warlordsoftwares.com/rishabh-bhardwaj/
+donation: https://paypal.me/TechRishabh/10
+
+apps:
+  twigpad:
+    command: bin/twigpad-launch    # packaging/snap/twigpad-launch: lets Qt pick X11 or Wayland
+    common-id: com.warlordsoftwares.twigpad
+    desktop: usr/share/applications/com.warlordsoftwares.twigpad.desktop
+    # The GNOME extension brings desktop, desktop-legacy, gsettings, opengl,
+    # wayland, x11 and unity7, plus the fonts, cursor themes and portals setup.
+    # PyQt5 comes from its PyPI wheel, which has its own Qt (with the xcb and
+    # Wayland platform plugins), so the KDE Neon extension's Qt is not needed.
+    extensions: [gnome]
+    plugs:
+      - home              # notes files in the home folder
+      - removable-media   # notes on USB sticks and other drives (/media, /mnt)
+      - network           # Options > Spelling > Download Dictionaries
+      - cups              # File > Print
+    environment:
+      # The bundled Qt is not KDE's; keep Qt from loading host plugins.
+      QT_PLUGIN_PATH: ""
+      PYTHONNOUSERSITE: "1"
+
+parts:
+  twigpad:
+    plugin: python
+    source: .
+    # pip installs the project and its dependencies (PyQt5, PyCryptodome) into
+    # the snap's own Python environment.
+    build-environment:
+      # The GNOME extension puts its SDK's Python first on PATH and its packages
+      # (an older pip among them) on PYTHONPATH; build with core22's Python,
+      # the one the snap runs on.
+      - PYTHONPATH: ""
+      - PATH: /usr/bin:/bin:$PATH
+      - PIP_NO_CACHE_DIR: "1"
+      - PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    stage-packages:
+      - python3-venv           # venv support; the interpreter is core22's Python 3.10
+      # Spell check: the Hunspell library (loaded with ctypes) and US English.
+      # More dictionaries can be downloaded in the app.
+      - libhunspell-1.7-0
+      - hunspell-en-us
+      # What the xcb platform plugin of the PyQt5 wheel links against
+      - libxcb-icccm4
+      - libxcb-image0
+      - libxcb-keysyms1
+      - libxcb-randr0
+      - libxcb-render-util0
+      - libxcb-shape0
+      - libxcb-util1
+      - libxcb-xinerama0
+      - libxcb-xkb1
+      - libxkbcommon-x11-0
+    override-pull: |
+      craftctl default
+      craftctl set version="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/twigpad/__init__.py)"
+    override-build: |
+      craftctl default
+      install -Dm755 packaging/snap/twigpad-launch "$CRAFT_PART_INSTALL/bin/twigpad-launch"
+      install -Dm644 data/com.warlordsoftwares.twigpad.desktop \
+        "$CRAFT_PART_INSTALL/usr/share/applications/com.warlordsoftwares.twigpad.desktop"
+      install -Dm644 data/com.warlordsoftwares.twigpad.metainfo.xml \
+        "$CRAFT_PART_INSTALL/usr/share/metainfo/com.warlordsoftwares.twigpad.metainfo.xml"
+      install -Dm644 src/twigpad/resources/twigpad.svg \
+        "$CRAFT_PART_INSTALL/usr/share/icons/hicolor/scalable/apps/com.warlordsoftwares.twigpad.svg"
+      install -Dm644 data/twigpad-mime.xml \
+        "$CRAFT_PART_INSTALL/usr/share/mime/packages/com.warlordsoftwares.twigpad.xml"
+    parse-info:
+      - usr/share/metainfo/com.warlordsoftwares.twigpad.metainfo.xml
+    prime:
+      - -usr/lib/python3*/test
+      - -lib/python3*/site-packages/pip
+      - -lib/python3*/site-packages/setuptools
+      # Parts of the PyQt5 wheel's Qt that Twigpad does not use (QML, 3D, PDF,
+      # SQL, speech, web view); some need libraries the wheel does not have.
+      - -lib/python3*/site-packages/PyQt5/Qt5/qml
+      - -lib/python3*/site-packages/PyQt5/Qt5/plugins/geometryloaders
+      - -lib/python3*/site-packages/PyQt5/Qt5/plugins/renderers
+      - -lib/python3*/site-packages/PyQt5/Qt5/plugins/renderplugins
+      - -lib/python3*/site-packages/PyQt5/Qt5/plugins/sceneparsers
+      - -lib/python3*/site-packages/PyQt5/Qt5/plugins/assetimporters
+      - -lib/python3*/site-packages/PyQt5/Qt5/plugins/sqldrivers
+      - -lib/python3*/site-packages/PyQt5/Qt5/plugins/texttospeech
+      - -lib/python3*/site-packages/PyQt5/Qt5/plugins/webview
+      - -lib/python3*/site-packages/PyQt5/Qt5/plugins/imageformats/libqpdf.so
+      - -lib/python3*/site-packages/PyQt5/Qt5/lib/libQt5MultimediaQuick.so*
+      - -lib/python3*/site-packages/PyQt5/Qt5/lib/libQt5QmlWorkerScript.so*
+      - -lib/python3*/site-packages/PyQt5/Qt5/lib/libQt5QuickControls2.so*
+      - -lib/python3*/site-packages/PyQt5/Qt5/lib/libQt5QuickParticles.so*
+      - -lib/python3*/site-packages/PyQt5/Qt5/lib/libQt5QuickShapes.so*
+      - -lib/python3*/site-packages/PyQt5/Qt5/lib/libQt5QuickTemplates2.so*
+      - -lib/python3*/site-packages/PyQt5/Qt5/lib/libQt5QuickTest.so*
+      - -lib/python3*/site-packages/PyQt5/Qt5/lib/libQt5WebView.so*
+
+lint:
+  ignore:
+    - library:
+        # Loaded with ctypes by twigpad.spell, so the linter cannot see it used.
+        - usr/lib/*/libhunspell-1.7.so*
