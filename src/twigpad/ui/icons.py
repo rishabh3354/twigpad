@@ -9,7 +9,7 @@ from PyQt5.QtCore import QPointF, QRectF, Qt
 from PyQt5.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import QApplication, QStyle
 
-from .. import APP_ID
+from .. import APP_ID, DESKTOP_ID
 
 SIZE = 32
 RESOURCES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources")
@@ -17,7 +17,7 @@ RESOURCES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 
 def app_icon() -> QIcon:
     """The application icon: the installed theme icon if any, else the bundled SVG."""
-    return QIcon.fromTheme(APP_ID, QIcon(os.path.join(RESOURCES, f"{APP_ID}.svg")))
+    return QIcon.fromTheme(DESKTOP_ID, QIcon(os.path.join(RESOURCES, f"{APP_ID}.svg")))
 
 
 def _canvas():

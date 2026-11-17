@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- AppStream metadata: what software centres show about the app. -->
 <component type="desktop-application">
-  <id>twigpad</id>
+  <id>io.github.rishabh3354.Twigpad</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <name>Twigpad</name>
   <summary>Organize notes, ideas and knowledge in a tree</summary>
-  <developer id="twigpad">
-    <name>Twigpad contributors</name>
+  <developer id="io.github.rishabh3354">
+    <name>rishabh3354</name>
   </developer>
 
   <description>
@@ -28,11 +28,15 @@
     </ul>
   </description>
 
-  <launchable type="desktop-id">twigpad.desktop</launchable>
+  <launchable type="desktop-id">io.github.rishabh3354.Twigpad.desktop</launchable>
   <provides>
     <binary>twigpad</binary>
     <mediatype>application/x-hjt</mediatype>
   </provides>
+
+  <url type="homepage">https://github.com/rishabh3354/twigpad</url>
+  <url type="bugtracker">https://github.com/rishabh3354/twigpad/issues</url>
+  <url type="vcs-browser">https://github.com/rishabh3354/twigpad</url>
 
   <categories>
     <category>Office</category>

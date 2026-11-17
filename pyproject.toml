@@ -23,6 +23,11 @@ classifiers = [
   "Topic :: Text Editors",
 ]
 
+[project.urls]
+Homepage = "https://github.com/rishabh3354/twigpad"
+Issues = "https://github.com/rishabh3354/twigpad/issues"
+Changelog = "https://github.com/rishabh3354/twigpad/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
 dev = ["pytest>=7"]
 

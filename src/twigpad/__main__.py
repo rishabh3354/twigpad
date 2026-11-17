@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import APP_ID, APP_NAME, __version__, hjt
+from . import APP_ID, APP_NAME, DESKTOP_ID, __version__, hjt
 
 
 def dump(path: str, show_text: bool) -> int:
@@ -41,7 +41,7 @@ def run_gui(path=None) -> int:
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(APP_ID)
     app.setApplicationVersion(__version__)
-    app.setDesktopFileName(APP_ID)
+    app.setDesktopFileName(DESKTOP_ID)
 
     from .ui.icons import app_icon
     from .ui.mainwindow import MainWindow

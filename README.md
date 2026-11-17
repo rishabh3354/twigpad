@@ -32,7 +32,7 @@ whole branches around, and search everything at once.
 Twigpad needs Python 3.8+ and PyQt5.
 
 ```bash
-git clone <repository-url> twigpad
+git clone https://github.com/rishabh3354/twigpad.git
 cd twigpad
 pip install --user .
 twigpad

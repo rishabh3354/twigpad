@@ -27,4 +27,4 @@ jobs:
       - name: Check data files
         run: |
           sudo apt-get install -y desktop-file-utils
-          desktop-file-validate data/twigpad.desktop
+          desktop-file-validate data/io.github.rishabh3354.Twigpad.desktop

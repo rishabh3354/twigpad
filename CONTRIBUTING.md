@@ -1,7 +1,8 @@
 # Contributing to Twigpad
 
 Thanks for helping. Bug reports, `.hjt` files that do not open correctly, and
-pull requests are all welcome.
+pull requests are all welcome on
+[GitHub](https://github.com/rishabh3354/twigpad/issues).
 
 ## Reporting a file that does not open
 
@@ -17,7 +18,7 @@ nothing private; a small file that shows the same problem is best.
 ## Development setup
 
 ```bash
-git clone <repository-url> twigpad
+git clone https://github.com/rishabh3354/twigpad.git
 cd twigpad
 python3 -m venv .venv
 . .venv/bin/activate
