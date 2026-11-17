@@ -246,6 +246,36 @@ class WindowTests(unittest.TestCase):
         self.assertTrue(any("only one top node" in w for w in shown))
         self.assertTrue(self.win.isWindowModified())
 
+    # --------------------------------------------------------- tree look
+
+    def test_classic_tree_look(self):
+        from twigpad.ui import treestyle
+        self.assertTrue(self.tree.classic)                      # on by default
+        self.assertEqual(self.tree.indentation(), treestyle.INDENT)
+        self.assertFalse(treestyle.folder_icon().isNull())
+        self.win.show()
+        self.tree.expandAll()
+        self.select("Soup")
+        app.processEvents()
+        self.assertFalse(self.tree.grab().isNull())             # paints lines, boxes, icons
+
+        # The rename box starts after the folder icon.
+        item = self.find("Soup")
+        self.tree.editItem(item, 0)
+        app.processEvents()
+        editor = QApplication.focusWidget()
+        row = self.tree.visualItemRect(item)
+        self.assertGreaterEqual(editor.geometry().left(), row.left() + treestyle.ICON)
+        QTest.keyClick(editor, Qt.Key_Escape)
+
+        self.win.act_classic_tree.setChecked(False)               # View menu switch
+        self.assertFalse(self.tree.classic)
+        self.assertFalse(self.win.settings.value("tree/classic", type=bool))
+        self.assertFalse(self.tree.grab().isNull())
+        other = MainWindow(self.win.settings)                   # remembered next start
+        self.assertFalse(other.tree.classic)
+        other.close()
+
     # -------------------------------------------------------------- links
 
     def test_links(self):

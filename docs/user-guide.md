@@ -52,6 +52,8 @@ its first line.
 | Ctrl+Tab or F6 | Switch between tree and article |
 
 **View** sets word wrap and separate fonts for the tree and the article.
+**View → Classic Tree Look** switches between the classic tree (folder icons,
+dotted lines, +/- boxes) and your desktop's standard tree style.
 
 ## Links
 

@@ -222,6 +222,8 @@ class MainWindow(QMainWindow):
 
         # View
         self.act_word_wrap = self._action("&Word Wrap", self.set_word_wrap, checkable=True)
+        self.act_classic_tree = self._action("C&lassic Tree Look", self.set_classic_tree, checkable=True,
+                                             tip="Folder icons, dotted lines and +/- boxes in the tree")
         self.act_expand_all = self._action("&Expand All", self.tree.expandAll)
         self.act_collapse_all = self._action("&Collapse All", self.tree.collapseAll)
         self.act_switch_pane = self._action("&Switch Pane", self.switch_pane, ["F6", "Ctrl+Tab"],
@@ -281,7 +283,7 @@ class MainWindow(QMainWindow):
         m.addActions(self._node_menu_actions())
 
         m = mb.addMenu("&View")
-        m.addAction(self.act_word_wrap)
+        m.addActions([self.act_word_wrap, self.act_classic_tree])
         m.addSeparator()
         m.addActions([self.act_expand_all, self.act_collapse_all])
         m.addSeparator()
@@ -357,6 +359,8 @@ class MainWindow(QMainWindow):
             self.splitter.restoreState(split)
         self.act_word_wrap.setChecked(s.value("editor/word_wrap", True, type=bool))
         self.set_word_wrap(self.act_word_wrap.isChecked())
+        self.act_classic_tree.setChecked(s.value("tree/classic", True, type=bool))
+        self.tree.set_classic(self.act_classic_tree.isChecked())
         for key, widget in (("fonts/editor", self.editor), ("fonts/tree", self.tree)):
             desc = s.value(key, "", type=str)
             font = QFont()
@@ -717,6 +721,10 @@ class MainWindow(QMainWindow):
         time = loc.toString(now.time(), QLocale.ShortFormat)
         text = {"date": date, "time": time}.get(which, f"{date} {time}")
         self.editor.insertPlainText(text)
+
+    def set_classic_tree(self, on: bool) -> None:
+        self.tree.set_classic(on)
+        self.settings.setValue("tree/classic", on)
 
     def set_word_wrap(self, on: bool) -> None:
         self.editor.setLineWrapMode(QPlainTextEdit.WidgetWidth if on else QPlainTextEdit.NoWrap)

@@ -25,6 +25,8 @@ All notable changes to Twigpad are listed here. The format follows
   shown underlined and opened with Ctrl+H or Ctrl+click; Copy Node Link
   Address (Ctrl+Shift+H); Edit → Insert Link to a file or folder.
 - Sort Whole Tree (all levels).
+- Classic tree look: folder icons, dotted connector lines, +/- boxes and a
+  title-only selection highlight (View → Classic Tree Look, on by default).
 
 ### Changed
 - A file has exactly one top node, as the `.hjt` format requires. Files with

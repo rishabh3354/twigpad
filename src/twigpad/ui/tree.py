@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import QSize, Qt, pyqtSignal
 from PyQt5.QtGui import QDrag
 from PyQt5.QtWidgets import QAbstractItemView, QTreeWidget, QTreeWidgetItem
 
 from ..model import Document, Node
+from . import treestyle
 
 DEFAULT_TITLE = "New node"
 
@@ -47,6 +48,26 @@ class NoteTree(QTreeWidget):
         self.setEditTriggers(QAbstractItemView.EditKeyPressed)
         self.setUniformRowHeights(True)
         self.setAnimated(False)
+        self.classic = False
+        self.setItemDelegate(treestyle.TreeDelegate(self))
+        self.set_classic(True)
+
+    # ------------------------------------------------------------ look
+
+    def set_classic(self, on: bool) -> None:
+        """Classic look: folder icons, dotted lines, +/- boxes."""
+        self.classic = on
+        self.setIndentation(treestyle.INDENT if on else self.style().pixelMetric(
+            self.style().PM_TreeViewIndentation, None, self))
+        self.setIconSize(QSize(treestyle.ICON, treestyle.ICON))
+        self.scheduleDelayedItemsLayout()
+        self.viewport().update()
+
+    def drawBranches(self, painter, rect, index) -> None:
+        if self.classic:
+            treestyle.draw_branches(self, painter, rect, index)
+        else:
+            super().drawBranches(painter, rect, index)
 
     # ------------------------------------------------------------ conversion
 
