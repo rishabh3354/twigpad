@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Twigpad
+GenericName=Tree Notes
+Comment=Organize notes, ideas and knowledge in a tree
+Exec=twigpad %f
+Icon=twigpad
+Terminal=false
+StartupNotify=true
+Categories=Office;
+Keywords=notes;notebook;outliner;outline;tree;hierarchical;organizer;knowledge base;PIM;hjt;
+MimeType=application/x-hjt;

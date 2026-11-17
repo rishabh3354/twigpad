@@ -1,0 +1,6 @@
+# Normalize text files to LF in the repository.
+* text=auto eol=lf
+
+# Sample tree files are Windows-format on purpose (CRLF, cp1252): never convert.
+tests/samples/** -text
+*.hjt -text

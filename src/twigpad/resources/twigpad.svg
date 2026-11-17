@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256" width="256" height="256">
+  <title>Twigpad</title>
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffdf7"/>
+      <stop offset="1" stop-color="#efe7d2"/>
+    </linearGradient>
+    <linearGradient id="band" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4fa253"/>
+      <stop offset="1" stop-color="#357a3a"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8fd16f"/>
+      <stop offset="1" stop-color="#3d8b40"/>
+    </linearGradient>
+    <path id="leafShape" d="M0 0 C9 -13 29 -14 40 -2 C29 11 9 11 0 0 Z"/>
+  </defs>
+
+  <!-- page with shadow -->
+  <rect x="32" y="26" width="200" height="216" rx="24" fill="#000" opacity="0.16"/>
+  <rect x="26" y="18" width="200" height="216" rx="24" fill="url(#page)" stroke="#c8bd9b" stroke-width="2"/>
+  <!-- top band with binding rings -->
+  <path d="M26 42 A24 24 0 0 1 50 18 H202 A24 24 0 0 1 226 42 V58 H26 Z" fill="url(#band)"/>
+  <g fill="#fffdf7" opacity="0.9">
+    <circle cx="70" cy="38" r="6"/>
+    <circle cx="126" cy="38" r="6"/>
+    <circle cx="182" cy="38" r="6"/>
+  </g>
+
+  <!-- twig: a stem with three branches -->
+  <g fill="none" stroke="#7b5331" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M62 74 C64 120 60 160 64 214" stroke-width="10"/>
+    <path d="M63 108 C74 106 84 101 94 96" stroke-width="7"/>
+    <path d="M62 150 C74 150 84 146 94 140" stroke-width="7"/>
+    <path d="M64 192 C76 192 86 188 96 182" stroke-width="7"/>
+  </g>
+
+  <!-- leaves at the branch tips (the "nodes") -->
+  <g fill="url(#leaf)" stroke="#2f6e33" stroke-width="1.5">
+    <use xlink:href="#leafShape" transform="translate(92 97) rotate(-24)"/>
+    <use xlink:href="#leafShape" transform="translate(92 141) rotate(-24)"/>
+    <use xlink:href="#leafShape" transform="translate(94 183) rotate(-24)"/>
+    <use xlink:href="#leafShape" transform="translate(63 78) rotate(-112) scale(0.7)"/>
+  </g>
+
+  <!-- note text beside each leaf -->
+  <g fill="#b7ab88">
+    <rect x="140" y="84" width="66" height="8" rx="4"/>
+    <rect x="140" y="98" width="48" height="8" rx="4"/>
+    <rect x="140" y="128" width="66" height="8" rx="4"/>
+    <rect x="140" y="142" width="56" height="8" rx="4"/>
+    <rect x="142" y="170" width="64" height="8" rx="4"/>
+    <rect x="142" y="184" width="40" height="8" rx="4"/>
+  </g>
+</svg>

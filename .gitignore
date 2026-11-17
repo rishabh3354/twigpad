@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.whl
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Packaging output
+*.AppImage
+*.snap
+squashfs-root/
+AppDir/
+parts/
+stage/
+prime/
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# Backups the app writes next to files you test with
+*.hjt.bak

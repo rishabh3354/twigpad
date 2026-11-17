@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Registers the .hjt tree notes file type so file managers open it with Twigpad. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-hjt">
+    <comment>Tree notes file</comment>
+    <sub-class-of type="text/plain"/>
+    <generic-icon name="text-x-generic"/>
+    <glob pattern="*.hjt"/>
+    <magic priority="50">
+      <!-- the version line every .hjt file starts with -->
+      <match type="string" offset="0" value="&lt;Treepad version"/>
+      <match type="string" offset="0" value="&lt;hj-Treepad version"/>
+    </magic>
+  </mime-type>
+</mime-info>

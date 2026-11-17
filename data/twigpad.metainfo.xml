@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata: what software centres show about the app. -->
+<component type="desktop-application">
+  <id>twigpad</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Twigpad</name>
+  <summary>Organize notes, ideas and knowledge in a tree</summary>
+  <developer id="twigpad">
+    <name>Twigpad contributors</name>
+  </developer>
+
+  <description>
+    <p>
+      Twigpad is a fast, simple hierarchical notes editor. Notes are kept in a
+      tree on the left; the text of the selected note is on the right. It is a
+      notebook, outliner and personal knowledge base in one small window, and
+      everything is stored in a single plain-text file.
+    </p>
+    <ul>
+      <li>Unlimited nesting: add, move, sort and drag notes anywhere in the tree</li>
+      <li>Find and replace across all note titles and text at once</li>
+      <li>Cut, copy and paste whole branches, also between windows</li>
+      <li>Opens and saves .hjt tree notes files, including backup copies and damaged files</li>
+      <li>Merge several files or backups into one</li>
+      <li>Export to plain text and print</li>
+      <li>Backup copy on save and optional auto-save</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">twigpad.desktop</launchable>
+  <provides>
+    <binary>twigpad</binary>
+    <mediatype>application/x-hjt</mediatype>
+  </provides>
+
+  <categories>
+    <category>Office</category>
+  </categories>
+  <keywords>
+    <keyword>notes</keyword>
+    <keyword>notebook</keyword>
+    <keyword>outliner</keyword>
+    <keyword>tree</keyword>
+    <keyword>hierarchical</keyword>
+    <keyword>knowledge base</keyword>
+    <keyword>organizer</keyword>
+    <keyword>hjt</keyword>
+  </keywords>
+
+  <content_rating type="oars-1.1"/>
+</component>
