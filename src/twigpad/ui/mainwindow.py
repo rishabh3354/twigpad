@@ -7,17 +7,18 @@ import shutil
 import zipfile
 from typing import List, Optional
 
-from PyQt5.QtCore import QDateTime, QLocale, QMimeData, QSettings, Qt, QTimer
-from PyQt5.QtGui import QFont, QKeySequence
+from PyQt5.QtCore import QDateTime, QEvent, QLocale, QMimeData, QSettings, Qt, QTimer, QUrl
+from PyQt5.QtGui import QDesktopServices, QFont, QKeySequence
 from PyQt5.QtWidgets import (
     QAction, QApplication, QFileDialog, QFontDialog, QLabel, QMainWindow, QMenu,
     QMessageBox, QPlainTextEdit, QSplitter, QStyle,
 )
 
-from .. import APP_ID, APP_NAME, __version__, export, hjt
+from .. import APP_ID, APP_NAME, __version__, export, hjt, links, search
 from ..model import Document, Node
 from . import icons
 from .finddialog import FindDialog
+from .highlighter import LinkHighlighter
 from .tree import NoteItem, NoteTree
 
 FILE_FILTERS = (
@@ -46,6 +47,8 @@ class MainWindow(QMainWindow):
 
         self.tree = NoteTree()
         self.editor = QPlainTextEdit()
+        self.link_highlighter = LinkHighlighter(self.editor.document())
+        self.editor.viewport().installEventFilter(self)  # Ctrl+click follows links
         self.splitter = QSplitter(Qt.Horizontal)
         self.splitter.addWidget(self.tree)
         self.splitter.addWidget(self.editor)
@@ -84,7 +87,9 @@ class MainWindow(QMainWindow):
         act = QAction(text, self)
         if icon is not None:
             act.setIcon(icon)
-        if shortcut:
+        if isinstance(shortcut, (list, tuple)):
+            act.setShortcuts([QKeySequence(k) for k in shortcut])
+        elif shortcut:
             act.setShortcut(QKeySequence(shortcut))
         if tip:
             act.setStatusTip(tip)
@@ -113,7 +118,7 @@ class MainWindow(QMainWindow):
                                      "Open a tree notes file or a backup")
         self.act_save = self._action("&Save", self.save, QKeySequence.Save,
                                      icons.themed("document-save", S.SP_DialogSaveButton), "Save the file")
-        self.act_save_as = self._action("Save &As...", self.save_as, "Ctrl+Shift+S",
+        self.act_save_as = self._action("Save &As...", self.save_as, "Ctrl+Alt+S",
                                         tip="Save under a new name")
         self.act_import_tree = self._action(
             "Tree File or Backup (into the selected node)...", self.import_tree_file,
@@ -148,60 +153,78 @@ class MainWindow(QMainWindow):
                                      "Ctrl+Shift+T", context_widget=e)
         self.act_datetime = self._action("Insert Date &and Time", lambda: self.insert_datetime("both"),
                                          "F5", context_widget=e)
+        self.act_follow_link = self._action("&Follow Link", self.follow_link, "Ctrl+H",
+                                            tip="Open the link at the cursor (Ctrl+click also works)",
+                                            context_widget=e)
+        self.act_link_file = self._action("Link to &File...", lambda: self.insert_file_link(False),
+                                          tip="Insert a link to a file")
+        self.act_link_folder = self._action("Link to F&older...", lambda: self.insert_file_link(True),
+                                            tip="Insert a link to a folder")
 
         # Search
-        self.act_find = self._action("&Find...", lambda: self.show_find(False), QKeySequence.Find,
+        self.act_find = self._action("&Find...", lambda: self.show_find(False), ["Ctrl+F", "Shift+F12"],
                                      icons.themed("edit-find", S.SP_FileDialogContentsView),
                                      "Search titles and articles of all nodes")
         self.act_find_next = self._action("Find &Next", lambda: self.find_again(False), "F3")
         self.act_find_prev = self._action("Find &Previous", lambda: self.find_again(True), "Shift+F3")
-        self.act_replace = self._action("&Replace...", lambda: self.show_find(True), "Ctrl+H")
+        self.act_replace = self._action("&Replace...", lambda: self.show_find(True), "Ctrl+R")
 
-        # Node
-        self.act_add_after = self._action("&Add Node", self.add_node_after, "Ins",
-                                          icons.add_sibling(), "Add a node below the selected one",
-                                          context_widget=t)
-        self.act_add_before = self._action("&Insert Node Before", self.add_node_before, "Shift+Ins",
-                                           tip="Add a node above the selected one", context_widget=t)
-        self.act_add_child = self._action("Add &Child Node", self.add_child_node, "Ctrl+Ins",
+        # Node (keys work while the tree has the focus)
+        self.act_add_child = self._action("Add &Child Node", self.add_child_node, "Ins",
                                           icons.add_child(), "Add a node inside the selected one",
                                           context_widget=t)
+        self.act_add_after = self._action("&Add Node Below", self.add_node_after, ["Shift+Ins", "Return"],
+                                          icons.add_sibling(), "Add a node below the selected one",
+                                          context_widget=t)
+        self.act_add_before = self._action("Add Node A&bove", self.add_node_before, "Ctrl+Shift+Ins",
+                                           tip="Add a node above the selected one", context_widget=t)
         self.act_rename = self._action("&Rename", self.rename_node, "F2",
                                        tip="Rename the selected node", context_widget=t)
         self.act_delete = self._action("&Delete Node", self.delete_node, "Del",
                                        icons.themed("edit-delete", S.SP_TrashIcon),
                                        "Delete the selected node and everything inside it",
                                        context_widget=t)
-        self.act_cut_node = self._action("Cu&t Node", self.cut_node, QKeySequence.Cut,
+        # Explicit keys: on Linux the standard Copy/Paste also include
+        # Ctrl+Ins / Shift+Ins, which add nodes here.
+        self.act_cut_node = self._action("Cu&t Node", self.cut_node, "Ctrl+X",
                                          tip="Cut the selected node and its subnodes", context_widget=t)
-        self.act_copy_node = self._action("C&opy Node", self.copy_node, QKeySequence.Copy,
+        self.act_copy_node = self._action("C&opy Node", self.copy_node, "Ctrl+C",
                                           tip="Copy the selected node and its subnodes", context_widget=t)
-        self.act_paste_node = self._action("&Paste Node", lambda: self.paste_node(False),
-                                           QKeySequence.Paste, tip="Paste below the selected node",
-                                           context_widget=t)
-        self.act_paste_child = self._action("Paste as C&hild", lambda: self.paste_node(True),
-                                            "Ctrl+Shift+V", tip="Paste inside the selected node",
+        self.act_paste_child = self._action("&Paste Node (as Child)", lambda: self.paste_node(True),
+                                            "Ctrl+V", tip="Paste inside the selected node",
                                             context_widget=t)
-        self.act_move_up = self._action("Move &Up", self.tree.move_up, "Ctrl+Shift+Up",
+        self.act_paste_node = self._action("Paste Node &Below", lambda: self.paste_node(False),
+                                           "Ctrl+Shift+V", tip="Paste below the selected node",
+                                           context_widget=t)
+        self.act_copy_link = self._action("Copy Node &Link Address", self.copy_node_link, "Ctrl+Shift+H",
+                                          tip="Copy a node:// link to paste into another article",
+                                          context_widget=t)
+        self.act_move_up = self._action("Move &Up", self.tree.move_up, "Shift+Up",
                                         icons.themed("go-up", S.SP_ArrowUp), "Move node up",
                                         context_widget=t)
-        self.act_move_down = self._action("Move Do&wn", self.tree.move_down, "Ctrl+Shift+Down",
+        self.act_move_down = self._action("Move Do&wn", self.tree.move_down, "Shift+Down",
                                           icons.themed("go-down", S.SP_ArrowDown), "Move node down",
                                           context_widget=t)
         self.act_move_left = self._action("Move &Left (out a level)", self.tree.move_left,
-                                          "Ctrl+Shift+Left", icons.themed("go-previous", S.SP_ArrowLeft),
+                                          "Shift+Left", icons.themed("go-previous", S.SP_ArrowLeft),
                                           "Move node out one level", context_widget=t)
         self.act_move_right = self._action("Move R&ight (in a level)", self.tree.move_right,
-                                           "Ctrl+Shift+Right", icons.themed("go-next", S.SP_ArrowRight),
+                                           "Shift+Right", icons.themed("go-next", S.SP_ArrowRight),
                                            "Move node in one level", context_widget=t)
-        self.act_sort = self._action("&Sort Subnodes A-Z", self.sort_children,
-                                     tip="Sort the nodes inside the selected node by title")
+        self.act_next_sibling = self._action("&Next Sibling", lambda: self.tree.select_sibling(1),
+                                             "Alt+Down", context_widget=t)
+        self.act_prev_sibling = self._action("Pre&vious Sibling", lambda: self.tree.select_sibling(-1),
+                                             "Alt+Up", context_widget=t)
+        self.act_sort = self._action("&Sort Subnodes (One Level)", self.sort_children, "Ctrl+Shift+S",
+                                     tip="Sort the nodes inside the selected node by title",
+                                     context_widget=t)
+        self.act_sort_all = self._action("Sort &Whole Tree (All Levels)", self.sort_whole_tree)
 
         # View
         self.act_word_wrap = self._action("&Word Wrap", self.set_word_wrap, checkable=True)
         self.act_expand_all = self._action("&Expand All", self.tree.expandAll)
         self.act_collapse_all = self._action("&Collapse All", self.tree.collapseAll)
-        self.act_switch_pane = self._action("&Switch Pane", self.switch_pane, "F6",
+        self.act_switch_pane = self._action("&Switch Pane", self.switch_pane, ["F6", "Ctrl+Tab"],
                                             tip="Jump between the tree and the article")
         self.act_article_font = self._action("&Article Font...", lambda: self.choose_font("editor"))
         self.act_tree_font = self._action("&Tree Font...", lambda: self.choose_font("tree"))
@@ -244,6 +267,10 @@ class MainWindow(QMainWindow):
         m.addAction(self.act_select_all)
         m.addSeparator()
         m.addActions([self.act_date, self.act_time, self.act_datetime])
+        m.addSeparator()
+        m.addAction(self.act_follow_link)
+        sub = m.addMenu("Insert &Link")
+        sub.addActions([self.act_link_file, self.act_link_folder])
 
         m = mb.addMenu("&Search")
         m.addActions([self.act_find, self.act_find_next, self.act_find_prev])
@@ -274,11 +301,13 @@ class MainWindow(QMainWindow):
 
     def _node_menu_actions(self) -> List[QAction]:
         sep = lambda: self._separator()  # noqa: E731
-        return [self.act_add_after, self.act_add_before, self.act_add_child, sep(),
+        return [self.act_add_child, self.act_add_after, self.act_add_before, sep(),
                 self.act_rename, self.act_delete, sep(),
-                self.act_cut_node, self.act_copy_node, self.act_paste_node, self.act_paste_child, sep(),
+                self.act_cut_node, self.act_copy_node, self.act_paste_child, self.act_paste_node, sep(),
+                self.act_copy_link, sep(),
                 self.act_move_up, self.act_move_down, self.act_move_left, self.act_move_right, sep(),
-                self.act_sort]
+                self.act_prev_sibling, self.act_next_sibling, sep(),
+                self.act_sort, self.act_sort_all]
 
     def _separator(self) -> QAction:
         a = QAction(self)
@@ -443,14 +472,21 @@ class MainWindow(QMainWindow):
         has = cur is not None
         idx = self.tree.index_in_parent(cur) if has else 0
         siblings = (cur.parent() or self.tree.invisibleRootItem()).childCount() if has else 0
-        for act in (self.act_add_child, self.act_rename, self.act_delete, self.act_cut_node,
-                    self.act_copy_node, self.act_paste_child, self.act_export_node,
-                    self.act_export_branch, self.act_print, self.act_print_node):
+        top = NoteTree.is_top(cur)
+        for act in (self.act_add_child, self.act_rename, self.act_copy_node, self.act_paste_child,
+                    self.act_copy_link, self.act_export_node, self.act_export_branch,
+                    self.act_print, self.act_print_node):
             act.setEnabled(has)
+        # The single top node cannot get siblings, be removed or be moved.
+        for act in (self.act_add_after, self.act_add_before, self.act_delete, self.act_cut_node,
+                    self.act_paste_node):
+            act.setEnabled(has and not top)
         self.act_move_up.setEnabled(has and idx > 0)
         self.act_move_down.setEnabled(has and idx < siblings - 1)
-        self.act_move_left.setEnabled(has and cur.parent() is not None)
+        self.act_move_left.setEnabled(has and not top and not NoteTree.is_top(cur.parent()))
         self.act_move_right.setEnabled(has and idx > 0)
+        self.act_prev_sibling.setEnabled(has and idx > 0)
+        self.act_next_sibling.setEnabled(has and idx < siblings - 1)
         self.act_sort.setEnabled(has and cur.childCount() > 1)
         n = len(self.tree.all_items())
         self.nodes_label.setText(f" {n} node{'s' if n != 1 else ''} ")
@@ -466,10 +502,18 @@ class MainWindow(QMainWindow):
         self.tree.editItem(item, 0)
 
     def add_node_after(self) -> None:
-        self._start_rename(self.tree.add_sibling(after=True))
+        self._add_sibling(after=True)
 
     def add_node_before(self) -> None:
-        self._start_rename(self.tree.add_sibling(after=False))
+        self._add_sibling(after=False)
+
+    def _add_sibling(self, after: bool) -> None:
+        item = self.tree.add_sibling(after=after)
+        if item is None:
+            self.statusBar().showMessage(
+                "The top node can't have nodes next to it. Use Ins to add a child node.", 5000)
+        else:
+            self._start_rename(item)
 
     def add_child_node(self) -> None:
         self._start_rename(self.tree.add_child())
@@ -482,6 +526,9 @@ class MainWindow(QMainWindow):
     def delete_node(self, confirm: bool = True) -> None:
         item = self.tree.currentItem()
         if item is None:
+            return
+        if NoteTree.is_top(item):
+            self.statusBar().showMessage("The top node can't be deleted.", 4000)
             return
         if confirm:
             inner = len(NoteTree.all_items_under(item)) - 1
@@ -519,8 +566,19 @@ class MainWindow(QMainWindow):
 
     def cut_node(self) -> None:
         item = self.tree.currentItem()
+        if NoteTree.is_top(item):
+            self.statusBar().showMessage("The top node can't be cut; use Copy instead.", 4000)
+            return
         if item is not None and self.copy_node():
             self._remove(item)
+
+    def copy_node_link(self) -> None:
+        item = self.tree.currentItem()
+        if item is None:
+            return
+        address = links.node_address(self.tree.title_path(item))
+        QApplication.clipboard().setText(f"[{address}]")
+        self.statusBar().showMessage(f"Copied link: [{address}]", 5000)
 
     def _clipboard_nodes(self) -> List[Node]:
         mime = QApplication.clipboard().mimeData()
@@ -549,34 +607,104 @@ class MainWindow(QMainWindow):
         if not nodes:
             self.statusBar().showMessage("Nothing to paste.", 3000)
             return
-        cur = self.tree.currentItem()
-        if cur is None:
-            self.tree.insert_nodes(nodes, None, self.tree.topLevelItemCount())
-        elif as_child:
+        self._insert_under_current(nodes, as_child)
+
+    def _insert_under_current(self, nodes: List[Node], as_child: bool = True) -> None:
+        """Insert inside the selected node, or below it. Never creates a
+        second top node: next to the top node means inside it."""
+        cur = self.tree.currentItem() or self.tree.topLevelItem(0)
+        if cur is None:  # empty tree: the first node becomes the top node
+            if len(nodes) > 1:
+                wrapper = Node("Notes")
+                for n in nodes:
+                    wrapper.add_child(n)
+                nodes = [wrapper]
+            self.tree.insert_nodes(nodes, None, 0)
+        elif as_child or NoteTree.is_top(cur):
             self.tree.insert_nodes(nodes, cur, cur.childCount())
         else:
             self.tree.insert_nodes(nodes, cur.parent(), self.tree.index_in_parent(cur) + 1)
 
     def sort_children(self) -> None:
         cur = self.tree.currentItem()
-        if cur is None or cur.childCount() < 2:
-            return
-        states = {}
-        kids = [cur.takeChild(0) for _ in range(cur.childCount())]
-        for k in kids:
-            states.update(self.tree._expanded_states(k))
-        kids.sort(key=lambda it: it.title.casefold())
-        cur.addChildren(kids)
-        for k in kids:
-            self.tree._restore_expanded(k, states)
-        cur.setExpanded(True)
-        self.tree.structureChanged.emit()
+        if cur is not None and self.tree.sort_children(cur):
+            cur.setExpanded(True)
+
+    def sort_whole_tree(self) -> None:
+        for i in range(self.tree.topLevelItemCount()):
+            self.tree.sort_children(self.tree.topLevelItem(i), recursive=True)
 
     def switch_pane(self) -> None:
         if self.tree.hasFocus() and self.editor.isEnabled():
             self.editor.setFocus()
         else:
             self.tree.setFocus()
+
+    # ================================================================ links
+
+    def link_at_cursor(self, cursor=None) -> Optional[str]:
+        cursor = cursor or self.editor.textCursor()
+        block = cursor.block().text()
+        pos = search.from_qt(block, cursor.positionInBlock())
+        selection = cursor.selectedText() if cursor.hasSelection() else ""
+        return links.link_at(block, pos, selection)
+
+    def follow_link(self, link: Optional[str] = None) -> bool:
+        link = link or self.link_at_cursor()
+        if not link:
+            self.statusBar().showMessage("There is no link at the cursor.", 4000)
+            return False
+        kind, target = links.classify(link)
+        if kind == links.NODE:
+            item = links.resolve_node(
+                [self.tree.topLevelItem(i) for i in range(self.tree.topLevelItemCount())],
+                target, lambda it: it.text(0),
+                lambda it: [it.child(i) for i in range(it.childCount())])
+            if item is None:
+                self.statusBar().showMessage(f"No node found for [{link}].", 6000)
+                return False
+            self.tree.setCurrentItem(item)
+            self.tree.scrollToItem(item)
+            self.tree.setFocus()
+            return True
+        if kind == links.FILE:
+            path = os.path.expanduser(target)
+            if not os.path.isabs(path):
+                # Relative links are relative to the folder of the open file.
+                base = os.path.dirname(os.path.abspath(self.path)) if self.path else os.getcwd()
+                path = os.path.join(base, path)
+            if not os.path.exists(path):
+                self.statusBar().showMessage(f"File not found: {path}", 6000)
+                return False
+            return self._open_url(QUrl.fromLocalFile(path))
+        return self._open_url(QUrl(target, QUrl.TolerantMode))
+
+    def _open_url(self, url: QUrl) -> bool:
+        """Hand a link to the desktop (browser, mail program, file manager)."""
+        ok = QDesktopServices.openUrl(url)
+        if not ok:
+            self.statusBar().showMessage(f"Could not open {url.toString()}", 6000)
+        return ok
+
+    def insert_file_link(self, folder: bool = False) -> None:
+        if not self.editor.isEnabled():
+            return
+        if folder:
+            path = QFileDialog.getExistingDirectory(self, "Link to Folder", self._last_dir())
+        else:
+            path, _ = QFileDialog.getOpenFileName(self, "Link to File", self._last_dir())
+        if path:
+            self.editor.insertPlainText(f"[file://{path}]")
+            self.editor.setFocus()
+
+    def eventFilter(self, obj, event) -> bool:
+        if (obj is self.editor.viewport() and event.type() == QEvent.MouseButtonRelease
+                and event.button() == Qt.LeftButton and event.modifiers() & Qt.ControlModifier):
+            link = self.link_at_cursor(self.editor.cursorForPosition(event.pos()))
+            if link:
+                self.follow_link(link)
+                return True
+        return super().eventFilter(obj, event)
 
     # ============================================================== editing
 
@@ -712,6 +840,8 @@ class MainWindow(QMainWindow):
             return False
         if not doc.top_nodes:
             doc.root.add_child(Node(NEW_FILE_TITLE))
+        wrapped = doc.ensure_single_root(
+            os.path.splitext(os.path.basename(path))[0].split(".")[0] or NEW_FILE_TITLE)
         self._set_document(doc)
         self.encoding = doc.encoding
         self.settings.setValue("files/last_dir", os.path.dirname(os.path.abspath(path)))
@@ -735,7 +865,7 @@ class MainWindow(QMainWindow):
         else:
             self.path = path
             self.source_name = ""
-            self.setWindowModified(False)
+            self.setWindowModified(wrapped)
             self.statusBar().showMessage(f"Opened {path}", 5000)
         self._update_title()
         self._show_repairs(doc)
@@ -754,11 +884,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("That file has no nodes.", 4000)
             return False
         self._commit_editor()
-        cur = self.tree.currentItem()
-        if cur is None:
-            self.tree.insert_nodes(doc.top_nodes, None, self.tree.topLevelItemCount())
-        else:
-            self.tree.insert_nodes(doc.top_nodes, cur, cur.childCount())
+        self._insert_under_current(doc.top_nodes)
         n = doc.node_count()
         self.statusBar().showMessage(f"Imported {n} node{'s' if n != 1 else ''} from {os.path.basename(path)}.", 6000)
         self._show_repairs(doc)
@@ -778,12 +904,7 @@ class MainWindow(QMainWindow):
             return False
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         title = os.path.splitext(os.path.basename(path))[0]
-        cur = self.tree.currentItem()
-        node = Node(title, text)
-        if cur is None:
-            self.tree.insert_nodes([node], None, self.tree.topLevelItemCount())
-        else:
-            self.tree.insert_nodes([node], cur, cur.childCount())
+        self._insert_under_current([Node(title, text)])
         return True
 
     def _nodes_for(self, scope: str) -> List[Node]:

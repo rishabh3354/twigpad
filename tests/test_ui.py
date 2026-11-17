@@ -90,9 +90,14 @@ class WindowTests(unittest.TestCase):
         self.select("Work")
         self.assertTrue(self.tree.move_up())
         self.assertEqual(self.titles(), [("My notes", 0), ("Work", 1), ("Recipes", 1), ("Soup", 2)])
+        self.assertFalse(self.tree.move_left())  # would become a second top node
+        self.select("Soup")
         self.assertTrue(self.tree.move_left())
-        self.assertEqual(self.titles(), [("My notes", 0), ("Recipes", 1), ("Soup", 2), ("Work", 0)])
+        self.assertEqual(self.titles(), [("My notes", 0), ("Work", 1), ("Recipes", 1), ("Soup", 1)])
         self.assertTrue(self.tree.move_right())
+        self.assertEqual(self.titles(), [("My notes", 0), ("Work", 1), ("Recipes", 1), ("Soup", 2)])
+        self.select("Work")
+        self.assertTrue(self.tree.move_down())
         self.assertEqual(self.titles(), [("My notes", 0), ("Recipes", 1), ("Soup", 2), ("Work", 1)])
         self.select("Recipes")
         self.assertTrue(self.tree.move_down())
@@ -166,6 +171,123 @@ class WindowTests(unittest.TestCase):
         app.processEvents()
         self.assertEqual(len(self.tree.all_items()), 5)
         self.assertEqual(self.tree.currentItem().title, "New node")
+
+    # ------------------------------------------------ classic key layout
+
+    def _key(self, key, mods=Qt.NoModifier, widget=None):
+        widget = widget or self.tree
+        widget.setFocus()
+        QTest.keyClick(widget, key, mods)
+        app.processEvents()
+        # Adding a node opens the title editor; close it so the tree has the keys again.
+        editor = QApplication.focusWidget()
+        if editor is not None and editor not in (self.tree, self.win.editor):
+            QTest.keyClick(editor, Qt.Key_Escape)
+            app.processEvents()
+
+    def test_classic_tree_keys(self):
+        self.win.show()
+        self.win.activateWindow()
+        QTest.qWaitForWindowActive(self.win)
+        self.select("Soup")
+        self._key(Qt.Key_Insert)                                  # Ins: child
+        self.assertEqual(self.titles()[3], ("New node", 3))
+        self.select("Soup")
+        self._key(Qt.Key_Insert, Qt.ShiftModifier)               # Shift+Ins: below
+        self.assertEqual(self.titles()[4], ("New node", 2))
+        self.select("Recipes")
+        self._key(Qt.Key_Insert, Qt.ControlModifier | Qt.ShiftModifier)   # above
+        self.assertEqual(self.titles()[1], ("New node", 1))
+        self.select("Recipes")
+        self._key(Qt.Key_Return)                                  # Enter: below
+        n = len(self.tree.all_items())
+        self.assertEqual(n, 8)
+
+        self.select("Work")
+        self._key(Qt.Key_Up, Qt.ShiftModifier)                    # Shift+Up: move
+        self.assertEqual(self.tree.index_in_parent(self.find("Work")), 2)
+        self._key(Qt.Key_Up, Qt.AltModifier)                      # Alt+Up: previous sibling
+        self.assertEqual(self.tree.currentItem().title, "Recipes")
+
+        # The top node: no siblings, no delete, no move.
+        self.select("My notes")
+        self._key(Qt.Key_Insert, Qt.ShiftModifier)
+        self._key(Qt.Key_Return)
+        self._key(Qt.Key_Delete)
+        self._key(Qt.Key_X, Qt.ControlModifier)
+        self.assertEqual(len(self.tree.all_items()), n)
+        self.assertEqual(self.tree.topLevelItemCount(), 1)
+
+        self._key(Qt.Key_Tab, Qt.ControlModifier)                 # Ctrl+Tab: switch pane
+        self.assertTrue(self.win.editor.hasFocus())
+
+    def test_paste_and_sort_keep_single_top(self):
+        self.select("Recipes")
+        self.win.copy_node()
+        self.select("My notes")
+        self.win.paste_node(as_child=False)   # next to the top node means inside it
+        self.assertEqual(self.tree.topLevelItemCount(), 1)
+        self.assertEqual(self.titles()[-2:], [("Recipes", 1), ("Soup", 2)])
+        self.tree.add_child("Apple")
+        self.select("My notes")
+        self.win.sort_whole_tree()
+        self.assertEqual([t for t, d in self.titles() if d == 1], ["Recipes", "Recipes", "Work"])
+        self.assertEqual(self.find("Soup").title, "Soup")
+
+    def test_file_with_several_top_nodes_is_wrapped(self):
+        path = os.path.join(self.dir, "multi.hjt")
+        with open(path, "w", encoding="cp1252", newline="\r\n") as fh:
+            fh.write(f"<Treepad version 2.7>\ndt=Text\n<node>\nA\n0\n<end node> {hjt.MAGIC}\n"
+                     f"dt=Text\n<node>\nB\n0\n<end node> {hjt.MAGIC}\n")
+        shown = []
+        self.win._show_repairs = lambda doc: shown.extend(doc.warnings)
+        self.assertTrue(self.win.load_path(path))
+        self.assertEqual(self.titles(), [("multi", 0), ("A", 1), ("B", 1)])
+        self.assertTrue(any("only one top node" in w for w in shown))
+        self.assertTrue(self.win.isWindowModified())
+
+    # -------------------------------------------------------------- links
+
+    def test_links(self):
+        opened = []
+        self.win._open_url = lambda url: opened.append(url.toString()) or True
+        self.select("Soup")
+        self.win.copy_node_link()
+        self.assertEqual(QApplication.clipboard().text(), "[node://My notes/Recipes/Soup]")
+
+        self.select("Work")
+        self.win.editor.setPlainText("see [node://my notes/recipes/soup] and [www.example.com] and "
+                                     "[file://missing.txt]")
+        cur = self.win.editor.textCursor()
+        cur.setPosition(10)
+        self.win.editor.setTextCursor(cur)
+        self.assertTrue(self.win.follow_link())
+        self.assertEqual(self.tree.currentItem().title, "Soup")
+
+        self.select("Work")
+        self.assertEqual(self.win.editor.toPlainText()[:4], "see ")  # edit was kept
+        cur = self.win.editor.textCursor()
+        cur.setPosition(45)
+        self.win.editor.setTextCursor(cur)
+        self.assertTrue(self.win.follow_link())
+        self.assertEqual(opened, ["http://www.example.com"])
+        self.assertFalse(self.win.follow_link("file://missing.txt"))
+        target = os.path.join(self.dir, "here.txt")
+        open(target, "w").close()
+        self.assertTrue(self.win.follow_link(f"file://{target}"))
+        self.assertTrue(opened[-1].endswith("/here.txt"))
+        self.assertFalse(self.win.follow_link("node://My notes/Nowhere"))
+
+        # Ctrl+H in the article follows the link under the cursor.
+        self.win.show()
+        self.win.activateWindow()
+        QTest.qWaitForWindowActive(self.win)
+        self.select("Work")
+        cur = self.win.editor.textCursor()
+        cur.setPosition(12)
+        self.win.editor.setTextCursor(cur)
+        self._key(Qt.Key_H, Qt.ControlModifier, widget=self.win.editor)
+        self.assertEqual(self.tree.currentItem().title, "Soup")
 
 
     # ------------------------------------------------------ step 3 features

@@ -54,3 +54,19 @@ class Document:
 
     def node_count(self) -> int:
         return sum(1 for _ in self.walk())
+
+    def ensure_single_root(self, title: str) -> bool:
+        """A .hjt file may have only one top node. If there are several, put
+        them under a new top node called ``title``. Returns True if it did."""
+        tops = self.root.children
+        if len(tops) <= 1:
+            return False
+        new_root = Node(title)
+        self.root.children = []
+        self.root.add_child(new_root)
+        for node in tops:
+            new_root.add_child(node)
+        self.warnings.append(
+            f"The file had {len(tops)} top-level nodes; they were placed under a new "
+            f"top node \"{title}\", because a tree file can have only one top node.")
+        return True

@@ -47,8 +47,8 @@ QT_QPA_PLATFORM=offscreen python3 -m unittest discover -s tests -t .
 |---|---|
 | `src/twigpad/` | The application package |
 | `src/twigpad/hjt.py` | `.hjt` reader and writer (no Qt) |
-| `src/twigpad/search.py`, `export.py`, `model.py`, `rtf.py` | Core logic (no Qt) |
-| `src/twigpad/ui/` | Qt widgets: main window, tree, find dialog, icons |
+| `src/twigpad/search.py`, `links.py`, `export.py`, `model.py`, `rtf.py` | Core logic (no Qt) |
+| `src/twigpad/ui/` | Qt widgets: main window, tree, find dialog, link highlighter, icons |
 | `src/twigpad/resources/` | Files shipped inside the package (app icon) |
 | `data/` | Desktop integration: `.desktop` entry, AppStream metadata, MIME type |
 | `docs/` | User guide and file format notes |

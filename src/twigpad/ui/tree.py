@@ -163,9 +163,18 @@ class NoteTree(QTreeWidget):
 
     # ------------------------------------------------------------ operations
 
-    def add_sibling(self, after: bool = True, title: str = DEFAULT_TITLE) -> NoteItem:
-        new = NoteItem(title)
+    # A tree file has exactly one top node: nothing can be added next to it,
+    # and it cannot be deleted, moved or dragged.
+
+    @staticmethod
+    def is_top(item: Optional[QTreeWidgetItem]) -> bool:
+        return item is not None and item.parent() is None
+
+    def add_sibling(self, after: bool = True, title: str = DEFAULT_TITLE) -> Optional[NoteItem]:
         cur = self.currentItem()
+        if self.is_top(cur):
+            return None
+        new = NoteItem(title)
         if cur is None:
             self.addTopLevelItem(new)
         else:
@@ -187,7 +196,9 @@ class NoteTree(QTreeWidget):
         self.structureChanged.emit()
         return new
 
-    def remove_item(self, item: NoteItem) -> None:
+    def remove_item(self, item: NoteItem) -> bool:
+        if self.is_top(item) and self.topLevelItemCount() == 1:
+            return False
         parent = self._siblings_parent(item)
         idx = parent.indexOfChild(item)
         # Pick the row that takes the focus afterwards: next sibling,
@@ -202,6 +213,7 @@ class NoteTree(QTreeWidget):
         if nxt is not None:
             self.setCurrentItem(nxt)
         self.structureChanged.emit()
+        return True
 
     def move_up(self) -> bool:
         cur = self.currentItem()
@@ -224,8 +236,8 @@ class NoteTree(QTreeWidget):
     def move_left(self) -> bool:
         """Promote: become the next sibling of the current parent."""
         cur = self.currentItem()
-        if cur is None or cur.parent() is None:
-            return False
+        if cur is None or cur.parent() is None or cur.parent().parent() is None:
+            return False  # children of the top node cannot become top nodes
         parent = cur.parent()
         grand = parent.parent()
         self.move_item(cur, grand, self._siblings_parent(parent).indexOfChild(parent) + 1)
@@ -243,13 +255,60 @@ class NoteTree(QTreeWidget):
         self.move_item(cur, prev, prev.childCount())
         return True
 
+    def select_sibling(self, step: int) -> bool:
+        """Jump to the next (+1) or previous (-1) node at the same level."""
+        cur = self.currentItem()
+        if cur is None:
+            return False
+        parent = self._siblings_parent(cur)
+        idx = parent.indexOfChild(cur) + step
+        if 0 <= idx < parent.childCount():
+            self.setCurrentItem(parent.child(idx))
+            self.scrollToItem(parent.child(idx))
+            return True
+        return False
+
+    def sort_children(self, item: QTreeWidgetItem, recursive: bool = False) -> bool:
+        """Sort the children of ``item`` by title (and their children too when
+        ``recursive``). The selected node and expanded branches are kept."""
+        current = self.currentItem()
+        changed = False
+        pending = [item]
+        while pending:
+            it = pending.pop()
+            if it.childCount() > 1:
+                kids = [it.takeChild(0) for _ in range(it.childCount())]
+                states = {}
+                for k in kids:
+                    states.update(self._expanded_states(k))
+                kids.sort(key=lambda k: k.title.casefold())
+                it.addChildren(kids)
+                for k in kids:
+                    self._restore_expanded(k, states)
+                changed = True
+            if recursive:
+                pending.extend(it.child(i) for i in range(it.childCount()))
+        if current is not None:
+            self.setCurrentItem(current)
+        if changed:
+            self.structureChanged.emit()
+        return changed
+
+    def title_path(self, item: QTreeWidgetItem) -> List[str]:
+        """Titles from the top node down to ``item``."""
+        titles = []
+        while item is not None:
+            titles.append(item.text(0))
+            item = item.parent()
+        return titles[::-1]
+
     # ------------------------------------------------------------ drag & drop
     # Moves are done by hand (take + insert of the same item) so the article
     # text and the expanded state of the subtree travel with the node.
 
     def startDrag(self, supported_actions) -> None:
         item = self.currentItem()
-        if item is None:
+        if item is None or self.is_top(item):
             return
         drag = QDrag(self)
         drag.setMimeData(self.mimeData([item]))
@@ -266,11 +325,15 @@ class NoteTree(QTreeWidget):
             event.ignore()
             return
         if target is None or pos == QAbstractItemView.OnViewport:
-            parent, index = None, self.topLevelItemCount()
+            event.ignore()  # would create a second top node
+            return
         elif pos == QAbstractItemView.OnItem:
             parent, index = target, target.childCount()
         else:
             parent = target.parent()
+            if parent is None:
+                event.ignore()  # next to the top node
+                return
             index = self._siblings_parent(target).indexOfChild(target)
             if pos == QAbstractItemView.BelowItem:
                 index += 1
