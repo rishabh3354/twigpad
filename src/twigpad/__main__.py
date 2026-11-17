@@ -32,8 +32,10 @@ def dump(path: str, show_text: bool) -> int:
 
 
 def run_gui(path=None) -> int:
-    from PyQt5.QtCore import Qt
+    from PyQt5.QtCore import QSettings, Qt
     from PyQt5.QtWidgets import QApplication
+
+    from .portable import portable_ini
 
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
@@ -46,7 +48,8 @@ def run_gui(path=None) -> int:
     from .ui.icons import app_icon
     from .ui.mainwindow import MainWindow
     app.setWindowIcon(app_icon())
-    win = MainWindow()
+    ini = portable_ini()
+    win = MainWindow(QSettings(ini, QSettings.IniFormat) if ini else None)
     win.show()
     if path:
         win.load_path(path)

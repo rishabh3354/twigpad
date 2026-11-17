@@ -8,13 +8,13 @@ import zipfile
 from typing import List, Optional
 
 from PyQt5.QtCore import QDateTime, QEvent, QLocale, QMimeData, QSettings, Qt, QTimer, QUrl
-from PyQt5.QtGui import QDesktopServices, QFont, QKeySequence
+from PyQt5.QtGui import QDesktopServices, QFont, QKeySequence, QTextCursor
 from PyQt5.QtWidgets import (
-    QAction, QApplication, QFileDialog, QFontDialog, QLabel, QMainWindow, QMenu,
-    QMessageBox, QPlainTextEdit, QSplitter, QStyle,
+    QAbstractItemView, QAction, QActionGroup, QApplication, QFileDialog, QFontDialog, QLabel,
+    QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QSplitter, QStyle, QSystemTrayIcon,
 )
 
-from .. import APP_ID, APP_NAME, __version__, export, hjt, links, search
+from .. import APP_ID, APP_NAME, __version__, export, hjt, importers, links, search, textfmt
 from ..model import Document, Node
 from . import icons
 from .finddialog import FindDialog
@@ -26,6 +26,8 @@ FILE_FILTERS = (
     "Tree notes (*.hjt *.HJT);;"
     "All files (*)"
 )
+TEXT_FILTERS = "Text files (*.txt *.text *.md *.log);;All files (*)"
+VIEW_MODES = ("both", "tree", "article")
 NEW_FILE_TITLE = "Notes"
 NODE_MIME = "application/x-twigpad-hjt"
 MAX_RECENT = 10
@@ -44,6 +46,10 @@ class MainWindow(QMainWindow):
         self._editor_dirty = False
         self._backed_up_path: Optional[str] = None
         self._find_dialog: Optional[FindDialog] = None
+        self.read_only = False
+        self.view_mode = "both"
+        self._tray: Optional[QSystemTrayIcon] = None
+        self._last_auto_paste = ""
 
         self.tree = NoteTree()
         self.editor = QPlainTextEdit()
@@ -72,10 +78,11 @@ class MainWindow(QMainWindow):
         self.tree.structureChanged.connect(self._on_structure_changed)
         self.editor.textChanged.connect(self._on_text_changed)
         self.editor.cursorPositionChanged.connect(self._update_cursor_label)
-        self.editor.undoAvailable.connect(self.act_undo.setEnabled)
-        self.editor.redoAvailable.connect(self.act_redo.setEnabled)
-        self.editor.copyAvailable.connect(self.act_cut.setEnabled)
+        self.editor.undoAvailable.connect(lambda on: self.act_undo.setEnabled(on and not self.read_only))
+        self.editor.redoAvailable.connect(lambda on: self.act_redo.setEnabled(on and not self.read_only))
+        self.editor.copyAvailable.connect(lambda on: self.act_cut.setEnabled(on and not self.read_only))
         self.editor.copyAvailable.connect(self.act_copy.setEnabled)
+        QApplication.clipboard().dataChanged.connect(self._on_clipboard_changed)
 
         self._restore_settings()
         self.new_file(confirm=False)
@@ -123,16 +130,30 @@ class MainWindow(QMainWindow):
         self.act_import_tree = self._action(
             "Tree File or Backup (into the selected node)...", self.import_tree_file,
             tip="Add all nodes of another tree file or backup inside the selected node")
-        self.act_import_text = self._action("Text File as New Node...", self.import_text_file,
-                                            tip="Add a text file as a new node inside the selected node")
-        self.act_export_node = self._action("Selected Node...", lambda: self.export_text("node"))
+        self.act_import_text = self._action("Text Files as New Nodes...", self.import_text_files,
+                                            tip="Add one or more text files as new nodes inside the selected node")
+        self.act_import_csv = self._action("CSV File (one node per row)...", self.import_csv_file,
+                                           tip="Add a node for every row of a CSV file inside the selected node")
+        self.act_export_node = self._action("Selected Node...", lambda: self.export_file("text", "node"))
         self.act_export_branch = self._action("Selected Node and Subnodes...",
-                                              lambda: self.export_text("branch"))
-        self.act_export_all = self._action("Whole File...", lambda: self.export_text("all"))
-        self.act_print = self._action("&Print...", lambda: self.print_nodes(True), QKeySequence.Print,
+                                              lambda: self.export_file("text", "branch"))
+        self.act_export_all = self._action("Whole File...", lambda: self.export_file("text", "all"))
+        self.act_html_node = self._action("Selected Node...", lambda: self.export_file("html", "node"))
+        self.act_html_branch = self._action("Selected Node and Subnodes...",
+                                            lambda: self.export_file("html", "branch"))
+        self.act_html_all = self._action("Whole File...", lambda: self.export_file("html", "all"))
+        self.act_export_tree = self._action(
+            "Selected Node and Subnodes as Tree File (.hjt)...", lambda: self.export_file("hjt", "branch"),
+            tip="Save the selected branch as a separate tree notes file")
+        self.act_print = self._action("&Print...", lambda: self.print_nodes("branch"), QKeySequence.Print,
                                       icons.themed("document-print", S.SP_FileDialogDetailedView),
                                       "Print the selected node and its subnodes")
-        self.act_print_node = self._action("Print Selected Node &Only...", lambda: self.print_nodes(False))
+        self.act_print_node = self._action("Print Selected Node &Only...", lambda: self.print_nodes("node"))
+        self.act_print_all = self._action("Print &Whole File...", lambda: self.print_nodes("all"))
+        self.act_read_only = self._action("Read &Only", self.set_read_only, checkable=True,
+                                          tip="Protect the open file from changes")
+        self.act_tray = self._action("&Minimize to Tray", self.minimize_to_tray, "Ctrl+M",
+                                     tip="Hide the window; click the tray icon to bring it back")
         self.act_exit = self._action("E&xit", self.close, "Ctrl+Q")
 
         # Edit (article text)
@@ -160,6 +181,22 @@ class MainWindow(QMainWindow):
                                           tip="Insert a link to a file")
         self.act_link_folder = self._action("Link to F&older...", lambda: self.insert_file_link(True),
                                             tip="Insert a link to a folder")
+        self.act_insert_file = self._action("Text from F&ile...", self.insert_text_file,
+                                            tip="Insert the contents of a text file at the cursor")
+
+        # Format (article text: the selection, or the whole article)
+        self.act_upper = self._action("&UPPERCASE", lambda: self.format_text(textfmt.to_upper),
+                                      tip="Change the selection (or the whole article) to capitals")
+        self.act_lower = self._action("&lowercase", lambda: self.format_text(textfmt.to_lower),
+                                      tip="Change the selection (or the whole article) to small letters")
+        self.act_strip = self._action("Remove Leading &Spaces",
+                                      lambda: self.format_text(textfmt.remove_leading_spaces),
+                                      tip="Remove spaces and tabs at the start of each line")
+        self.act_strip_returns = self._action(
+            "Remove Leading Spaces and &Returns",
+            lambda: self.format_text(textfmt.remove_leading_spaces_and_returns),
+            tip="Remove quote marks and indentation and join wrapped lines into paragraphs "
+                "(for pasted email)")
 
         # Search
         self.act_find = self._action("&Find...", lambda: self.show_find(False), ["Ctrl+F", "Shift+F12"],
@@ -219,13 +256,37 @@ class MainWindow(QMainWindow):
                                      tip="Sort the nodes inside the selected node by title",
                                      context_widget=t)
         self.act_sort_all = self._action("Sort &Whole Tree (All Levels)", self.sort_whole_tree)
+        self.act_siblings_right = self._action(
+            "Next Siblings Move Right", self.move_next_siblings_right,
+            tip="The nodes below the selected one (same level) move inside it")
+        self.act_children_left = self._action(
+            "All Children Move Left", self.move_children_left,
+            tip="The nodes inside the selected one move out, to just below it")
+        self.act_copy_name = self._action("Copy Node &Name", self.copy_node_name,
+                                          tip="Copy the title of the selected node")
+        self.act_paste_name = self._action("Paste Node Na&me", self.paste_node_name,
+                                           tip="Rename the selected node to the text on the clipboard")
 
         # View
         self.act_word_wrap = self._action("&Word Wrap", self.set_word_wrap, checkable=True)
         self.act_classic_tree = self._action("C&lassic Tree Look", self.set_classic_tree, checkable=True,
                                              tip="Folder icons, dotted lines and +/- boxes in the tree")
+        self.view_group = QActionGroup(self)
+        self.act_view_modes = {}
+        for mode, label in (("both", "Tree &and Article"), ("tree", "Tree O&nly"),
+                            ("article", "Article Onl&y")):
+            act = QAction(label, self, checkable=True)
+            act.triggered.connect(lambda _c=False, m=mode: self.set_view_mode(m))
+            self.view_group.addAction(act)
+            self.act_view_modes[mode] = act
         self.act_expand_all = self._action("&Expand All", self.tree.expandAll)
         self.act_collapse_all = self._action("&Collapse All", self.tree.collapseAll)
+        self.act_expand_one = self._action("Expand Selected Node (One Level)",
+                                           lambda: self.expand_branch(True, False))
+        self.act_expand_branch = self._action("Expand Selected Node (All Levels)",
+                                              lambda: self.expand_branch(True, True))
+        self.act_collapse_branch = self._action("Collapse Selected Node",
+                                                lambda: self.expand_branch(False, True))
         self.act_switch_pane = self._action("&Switch Pane", self.switch_pane, ["F6", "Ctrl+Tab"],
                                             tip="Jump between the tree and the article")
         self.act_article_font = self._action("&Article Font...", lambda: self.choose_font("editor"))
@@ -241,6 +302,9 @@ class MainWindow(QMainWindow):
             lambda on: self.settings.setValue("options/backup", on), checkable=True)
         self.act_autosave = self._action(f"&Auto-save Every {AUTOSAVE_MINUTES} Minutes",
                                          self.set_autosave, checkable=True)
+        self.act_auto_paste = self._action(
+            "Automatic &Paste", self.set_auto_paste, checkable=True,
+            tip="Text copied in other programs is added to the current article")
 
         self.act_about = self._action(f"&About {APP_NAME}", self.about)
 
@@ -253,13 +317,19 @@ class MainWindow(QMainWindow):
         m.addActions([self.act_save, self.act_save_as])
         m.addSeparator()
         sub = m.addMenu("&Import")
-        sub.addActions([self.act_import_tree, self.act_import_text])
-        sub = m.addMenu("&Export as Text")
-        sub.addActions([self.act_export_node, self.act_export_branch, self.act_export_all])
+        sub.addActions([self.act_import_tree, self.act_import_text, self.act_import_csv])
+        sub = m.addMenu("&Export")
+        text = sub.addMenu("As &Text")
+        text.addActions([self.act_export_node, self.act_export_branch, self.act_export_all])
+        page = sub.addMenu("As &HTML Web Page")
+        page.addActions([self.act_html_node, self.act_html_branch, self.act_html_all])
+        sub.addAction(self.act_export_tree)
         m.addSeparator()
-        m.addActions([self.act_print, self.act_print_node])
+        m.addActions([self.act_print, self.act_print_node, self.act_print_all])
         m.addSeparator()
-        m.addAction(self.act_exit)
+        m.addAction(self.act_read_only)
+        m.addSeparator()
+        m.addActions([self.act_tray, self.act_exit])
 
         m = mb.addMenu("&Edit")
         m.addActions([self.act_undo, self.act_redo])
@@ -271,8 +341,15 @@ class MainWindow(QMainWindow):
         m.addActions([self.act_date, self.act_time, self.act_datetime])
         m.addSeparator()
         m.addAction(self.act_follow_link)
-        sub = m.addMenu("Insert &Link")
+        sub = m.addMenu("&Insert")
         sub.addActions([self.act_link_file, self.act_link_folder])
+        sub.addSeparator()
+        sub.addAction(self.act_insert_file)
+
+        m = mb.addMenu("F&ormat")
+        m.addActions([self.act_upper, self.act_lower])
+        m.addSeparator()
+        m.addActions([self.act_strip, self.act_strip_returns])
 
         m = mb.addMenu("&Search")
         m.addActions([self.act_find, self.act_find_next, self.act_find_prev])
@@ -283,8 +360,11 @@ class MainWindow(QMainWindow):
         m.addActions(self._node_menu_actions())
 
         m = mb.addMenu("&View")
+        m.addActions(list(self.act_view_modes.values()))
+        m.addSeparator()
         m.addActions([self.act_word_wrap, self.act_classic_tree])
         m.addSeparator()
+        m.addActions([self.act_expand_one, self.act_expand_branch, self.act_collapse_branch])
         m.addActions([self.act_expand_all, self.act_collapse_all])
         m.addSeparator()
         m.addActions([self.act_article_font, self.act_tree_font, self.act_reset_fonts])
@@ -294,6 +374,8 @@ class MainWindow(QMainWindow):
 
         m = mb.addMenu("&Options")
         m.addActions([self.act_open_last, self.act_backup, self.act_autosave])
+        m.addSeparator()
+        m.addAction(self.act_auto_paste)
 
         m = mb.addMenu("&Help")
         m.addAction(self.act_about)
@@ -306,8 +388,9 @@ class MainWindow(QMainWindow):
         return [self.act_add_child, self.act_add_after, self.act_add_before, sep(),
                 self.act_rename, self.act_delete, sep(),
                 self.act_cut_node, self.act_copy_node, self.act_paste_child, self.act_paste_node, sep(),
-                self.act_copy_link, sep(),
-                self.act_move_up, self.act_move_down, self.act_move_left, self.act_move_right, sep(),
+                self.act_copy_name, self.act_paste_name, self.act_copy_link, sep(),
+                self.act_move_up, self.act_move_down, self.act_move_left, self.act_move_right,
+                self.act_siblings_right, self.act_children_left, sep(),
                 self.act_prev_sibling, self.act_next_sibling, sep(),
                 self.act_sort, self.act_sort_all]
 
@@ -338,6 +421,9 @@ class MainWindow(QMainWindow):
         sb = self.statusBar()
         self.nodes_label = QLabel()
         self.cursor_label = QLabel()
+        self.read_only_label = QLabel(" Read only ")
+        self.read_only_label.setVisible(False)
+        sb.addPermanentWidget(self.read_only_label)
         sb.addPermanentWidget(self.nodes_label)
         sb.addPermanentWidget(self.cursor_label)
         self._update_cursor_label()
@@ -361,6 +447,8 @@ class MainWindow(QMainWindow):
         self.set_word_wrap(self.act_word_wrap.isChecked())
         self.act_classic_tree.setChecked(s.value("tree/classic", True, type=bool))
         self.tree.set_classic(self.act_classic_tree.isChecked())
+        mode = s.value("view/mode", "both", type=str)
+        self.set_view_mode(mode if mode in VIEW_MODES else "both")
         for key, widget in (("fonts/editor", self.editor), ("fonts/tree", self.tree)):
             desc = s.value(key, "", type=str)
             font = QFont()
@@ -477,21 +565,28 @@ class MainWindow(QMainWindow):
         idx = self.tree.index_in_parent(cur) if has else 0
         siblings = (cur.parent() or self.tree.invisibleRootItem()).childCount() if has else 0
         top = NoteTree.is_top(cur)
-        for act in (self.act_add_child, self.act_rename, self.act_copy_node, self.act_paste_child,
-                    self.act_copy_link, self.act_export_node, self.act_export_branch,
-                    self.act_print, self.act_print_node):
+        rw = not self.read_only
+        for act in (self.act_copy_node, self.act_copy_link, self.act_copy_name,
+                    self.act_export_node, self.act_export_branch, self.act_html_node,
+                    self.act_html_branch, self.act_export_tree, self.act_print, self.act_print_node,
+                    self.act_expand_one, self.act_expand_branch, self.act_collapse_branch):
             act.setEnabled(has)
+        for act in (self.act_add_child, self.act_rename, self.act_paste_child, self.act_paste_name):
+            act.setEnabled(has and rw)
         # The single top node cannot get siblings, be removed or be moved.
         for act in (self.act_add_after, self.act_add_before, self.act_delete, self.act_cut_node,
                     self.act_paste_node):
-            act.setEnabled(has and not top)
-        self.act_move_up.setEnabled(has and idx > 0)
-        self.act_move_down.setEnabled(has and idx < siblings - 1)
-        self.act_move_left.setEnabled(has and not top and not NoteTree.is_top(cur.parent()))
-        self.act_move_right.setEnabled(has and idx > 0)
+            act.setEnabled(has and rw and not top)
+        self.act_move_up.setEnabled(has and rw and idx > 0)
+        self.act_move_down.setEnabled(has and rw and idx < siblings - 1)
+        self.act_move_left.setEnabled(has and rw and not top and not NoteTree.is_top(cur.parent()))
+        self.act_move_right.setEnabled(has and rw and idx > 0)
+        self.act_siblings_right.setEnabled(has and rw and not top and idx < siblings - 1)
+        self.act_children_left.setEnabled(has and rw and not top and cur.childCount() > 0)
         self.act_prev_sibling.setEnabled(has and idx > 0)
         self.act_next_sibling.setEnabled(has and idx < siblings - 1)
-        self.act_sort.setEnabled(has and cur.childCount() > 1)
+        self.act_sort.setEnabled(has and rw and cur.childCount() > 1)
+        self.act_sort_all.setEnabled(rw)
         n = len(self.tree.all_items())
         self.nodes_label.setText(f" {n} node{'s' if n != 1 else ''} ")
 
@@ -607,6 +702,8 @@ class MainWindow(QMainWindow):
         return []
 
     def paste_node(self, as_child: bool = False) -> None:
+        if not self._writable():
+            return
         nodes = self._clipboard_nodes()
         if not nodes:
             self.statusBar().showMessage("Nothing to paste.", 3000)
@@ -635,14 +732,166 @@ class MainWindow(QMainWindow):
             cur.setExpanded(True)
 
     def sort_whole_tree(self) -> None:
+        if not self._writable():
+            return
         for i in range(self.tree.topLevelItemCount()):
             self.tree.sort_children(self.tree.topLevelItem(i), recursive=True)
 
+    def move_next_siblings_right(self) -> int:
+        if not self._writable():
+            return 0
+        n = self.tree.move_next_siblings_right()
+        if n:
+            self.statusBar().showMessage(f"Moved {n} node{'s' if n != 1 else ''} inside the selected node.", 4000)
+        return n
+
+    def move_children_left(self) -> int:
+        if not self._writable():
+            return 0
+        if NoteTree.is_top(self.tree.currentItem()):
+            self.statusBar().showMessage("The nodes inside the top node can't move out of it.", 4000)
+            return 0
+        n = self.tree.move_children_left()
+        if n:
+            self.statusBar().showMessage(f"Moved {n} node{'s' if n != 1 else ''} out one level.", 4000)
+        return n
+
+    def copy_node_name(self) -> None:
+        item = self.tree.currentItem()
+        if item is not None:
+            QApplication.clipboard().setText(item.title)
+            self.statusBar().showMessage(f"Copied node name: {item.title}", 4000)
+
+    def paste_node_name(self) -> bool:
+        item = self.tree.currentItem()
+        if item is None or not self._writable():
+            return False
+        text = QApplication.clipboard().text()
+        title = next((" ".join(line.split()) for line in text.splitlines() if line.strip()), "")
+        if not title:
+            self.statusBar().showMessage("There is no text on the clipboard.", 3000)
+            return False
+        item.setText(0, title[:200])
+        return True
+
+    def expand_branch(self, expanded: bool, all_levels: bool) -> None:
+        item = self.tree.currentItem()
+        if item is not None:
+            NoteTree.set_branch_expanded(item, expanded, all_levels)
+            self.tree.scrollToItem(item)
+
     def switch_pane(self) -> None:
+        if self.view_mode != "both":
+            return
         if self.tree.hasFocus() and self.editor.isEnabled():
             self.editor.setFocus()
         else:
             self.tree.setFocus()
+
+    # ====================================================== view & modes
+
+    def set_view_mode(self, mode: str) -> None:
+        """'both' panes, the 'tree' only, or the 'article' only."""
+        self.view_mode = mode
+        self.act_view_modes[mode].setChecked(True)
+        self.tree.setVisible(mode != "article")
+        self.editor.setVisible(mode != "tree")
+        if mode == "article":
+            self.editor.setFocus()
+        elif mode == "tree":
+            self.tree.setFocus()
+        self.settings.setValue("view/mode", mode)
+
+    def _writable(self) -> bool:
+        if self.read_only:
+            self.statusBar().showMessage("The file is read only (File > Read Only).", 4000)
+            return False
+        return True
+
+    def set_read_only(self, on: bool) -> None:
+        """Protect the open file: nothing can be changed until it is turned off."""
+        self.read_only = on
+        if self.act_read_only.isChecked() != on:
+            self.act_read_only.blockSignals(True)
+            self.act_read_only.setChecked(on)
+            self.act_read_only.blockSignals(False)
+        self.editor.setReadOnly(on)
+        self.tree.setDragDropMode(QAbstractItemView.NoDragDrop if on else QAbstractItemView.InternalMove)
+        self.tree.setEditTriggers(QAbstractItemView.NoEditTriggers if on else QAbstractItemView.EditKeyPressed)
+        for act in (self.act_save, self.act_paste, self.act_date, self.act_time, self.act_datetime,
+                    self.act_link_file, self.act_link_folder, self.act_insert_file, self.act_replace,
+                    self.act_upper, self.act_lower, self.act_strip, self.act_strip_returns,
+                    self.act_import_tree, self.act_import_text, self.act_import_csv):
+            act.setEnabled(not on)
+        doc = self.editor.document()
+        self.act_undo.setEnabled(not on and doc.isUndoAvailable())
+        self.act_redo.setEnabled(not on and doc.isRedoAvailable())
+        self.act_cut.setEnabled(not on and self.editor.textCursor().hasSelection())
+        self.read_only_label.setVisible(on)
+        if self._find_dialog is not None and on and self._find_dialog.btn_replace.isVisible():
+            self._find_dialog.show_dialog(False)
+        self._update_node_actions()
+
+    def minimize_to_tray(self) -> None:
+        """Hide the window to the system tray (or just minimize when there is no tray)."""
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            self.showMinimized()
+            return
+        if self._tray is None:
+            self._tray = QSystemTrayIcon(icons.app_icon(), self)
+            self._tray.setToolTip(APP_NAME)
+            menu = QMenu(self)
+            menu.addAction(f"&Show {APP_NAME}", self.restore_from_tray)
+            menu.addSeparator()
+            menu.addAction("E&xit", lambda: (self.restore_from_tray(), self.close()))
+            self._tray.setContextMenu(menu)
+            self._tray.activated.connect(self._on_tray_activated)
+        self._tray.show()
+        self.hide()
+
+    def _on_tray_activated(self, reason) -> None:
+        if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
+            self.restore_from_tray()
+
+    def restore_from_tray(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+        if self._tray is not None:
+            self._tray.hide()
+
+    # ===================================================== automatic paste
+
+    def set_auto_paste(self, on: bool) -> None:
+        # Start from what is on the clipboard now, so only new copies are added.
+        self._last_auto_paste = QApplication.clipboard().text() if on else ""
+        if on:
+            self.statusBar().showMessage(
+                "Automatic Paste is on: text you copy in other programs is added to this article.", 6000)
+
+    def _clipboard_is_ours(self) -> bool:
+        return QApplication.clipboard().ownsClipboard()
+
+    def _on_clipboard_changed(self) -> None:
+        if not self.act_auto_paste.isChecked() or self.read_only or not self.editor.isEnabled():
+            return
+        if self._clipboard_is_ours():
+            return  # copied inside Twigpad
+        text = QApplication.clipboard().text()
+        if not text or text == self._last_auto_paste:
+            return
+        self._last_auto_paste = text
+        self.auto_paste(text)
+
+    def auto_paste(self, text: str) -> None:
+        """Add ``text`` at the end of the current article, on its own lines."""
+        cursor = QTextCursor(self.editor.document())
+        cursor.movePosition(QTextCursor.End)
+        existing = self.editor.toPlainText()
+        prefix = "" if not existing or existing.endswith("\n") else "\n"
+        cursor.insertText(prefix + text.replace("\r\n", "\n").rstrip("\n") + "\n")
+        self.editor.setTextCursor(cursor)
+        self.editor.ensureCursorVisible()
 
     # ================================================================ links
 
@@ -691,7 +940,7 @@ class MainWindow(QMainWindow):
         return ok
 
     def insert_file_link(self, folder: bool = False) -> None:
-        if not self.editor.isEnabled():
+        if not self.editor.isEnabled() or not self._writable():
             return
         if folder:
             path = QFileDialog.getExistingDirectory(self, "Link to Folder", self._last_dir())
@@ -713,7 +962,7 @@ class MainWindow(QMainWindow):
     # ============================================================== editing
 
     def insert_datetime(self, which: str) -> None:
-        if not self.editor.isEnabled():
+        if not self.editor.isEnabled() or not self._writable():
             return
         now = QDateTime.currentDateTime()
         loc = QLocale()
@@ -810,6 +1059,7 @@ class MainWindow(QMainWindow):
         self.path = None
         self.source_name = ""
         self.encoding = "cp1252"
+        self.set_read_only(False)
         self.setWindowModified(False)
         self._update_title()
 
@@ -858,6 +1108,7 @@ class MainWindow(QMainWindow):
         # Backups and archives are imported: Save asks for a new .hjt name
         # instead of overwriting the backup.
         imported = not path.lower().endswith(".hjt")
+        locked = False
         if imported:
             self.path = None
             base = os.path.basename(path)
@@ -874,12 +1125,17 @@ class MainWindow(QMainWindow):
             self.path = path
             self.source_name = ""
             self.setWindowModified(wrapped)
-            self.statusBar().showMessage(f"Opened {path}", 5000)
+            locked = not os.access(path, os.W_OK)
+            self.statusBar().showMessage(
+                f"Opened {path}" + (" (read only: the file can't be changed)" if locked else ""), 5000)
+        self.set_read_only(locked)
         self._update_title()
         self._show_repairs(doc)
         return True
 
     def import_tree_file(self, path: Optional[str] = None) -> bool:
+        if not self._writable():
+            return False
         if path is None:
             path, _ = QFileDialog.getOpenFileName(self, "Import Tree File or Backup",
                                                   self._last_dir(), FILE_FILTERS)
@@ -898,21 +1154,102 @@ class MainWindow(QMainWindow):
         self._show_repairs(doc)
         return True
 
-    def import_text_file(self, path: Optional[str] = None) -> bool:
-        if path is None:
-            path, _ = QFileDialog.getOpenFileName(self, "Import Text File", self._last_dir(),
-                                                  "Text files (*.txt *.text *.md *.log);;All files (*)")
-            if not path:
-                return False
+    def _read_text(self, path: str) -> Optional[str]:
         try:
             with open(path, "rb") as fh:
                 text, _enc = hjt.decode_bytes(fh.read())
         except OSError as exc:
             QMessageBox.warning(self, APP_NAME, f"Could not read \"{path}\".\n\n{exc}")
+            return None
+        return text.replace("\r\n", "\n").replace("\r", "\n")
+
+    def import_text_file(self, path: Optional[str] = None) -> bool:
+        return self.import_text_files([path] if path else None)
+
+    def import_text_files(self, paths: Optional[List[str]] = None) -> bool:
+        """Add each text file as a new node inside the selected node."""
+        if not self._writable():
             return False
-        text = text.replace("\r\n", "\n").replace("\r", "\n")
-        title = os.path.splitext(os.path.basename(path))[0]
-        self._insert_under_current([Node(title, text)])
+        if paths is None:
+            paths, _ = QFileDialog.getOpenFileNames(self, "Import Text Files", self._last_dir(), TEXT_FILTERS)
+            if not paths:
+                return False
+        nodes = []
+        for path in paths:
+            text = self._read_text(path)
+            if text is not None:
+                nodes.append(Node(os.path.splitext(os.path.basename(path))[0], text))
+        if not nodes:
+            return False
+        self._commit_editor()
+        self._insert_under_current(nodes)
+        n = len(nodes)
+        self.statusBar().showMessage(f"Imported {n} text file{'s' if n != 1 else ''}.", 5000)
+        return True
+
+    def import_csv_file(self, path: Optional[str] = None) -> bool:
+        """Add a node for every row of a CSV file inside the selected node."""
+        if not self._writable():
+            return False
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(self, "Import CSV File", self._last_dir(),
+                                                  "CSV files (*.csv *.CSV *.tsv *.txt);;All files (*)")
+            if not path:
+                return False
+        text = self._read_text(path)
+        if text is None:
+            return False
+        nodes = importers.csv_to_nodes(text)
+        if not nodes:
+            self.statusBar().showMessage("That file has no rows.", 4000)
+            return False
+        self._commit_editor()
+        self._insert_under_current(nodes)
+        n = len(nodes)
+        self.statusBar().showMessage(f"Imported {n} row{'s' if n != 1 else ''} from {os.path.basename(path)}.", 5000)
+        return True
+
+    def insert_text_file(self, path: Optional[str] = None) -> bool:
+        """Insert the contents of a text file at the cursor."""
+        if not self.editor.isEnabled() or not self._writable():
+            return False
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(self, "Insert Text from File", self._last_dir(), TEXT_FILTERS)
+            if not path:
+                return False
+        text = self._read_text(path)
+        if text is None:
+            return False
+        self.editor.insertPlainText(text)
+        self.editor.setFocus()
+        return True
+
+    def format_text(self, func) -> bool:
+        """Apply a Format-menu change to the selection, or to the whole article
+        when nothing is selected. One Ctrl+Z undoes it."""
+        if not self.editor.isEnabled() or not self._writable():
+            return False
+        cursor = self.editor.textCursor()
+        whole = not cursor.hasSelection()
+        if whole:
+            old = self.editor.toPlainText()
+            pos = cursor.position()
+            cursor.select(QTextCursor.Document)
+        else:
+            old = cursor.selectedText().replace(" ", "\n")
+            start = cursor.selectionStart()
+        new = func(old)
+        if new == old:
+            return False
+        cursor.beginEditBlock()
+        cursor.insertText(new)
+        cursor.endEditBlock()
+        if whole:
+            cursor.setPosition(min(pos, self.editor.document().characterCount() - 1))
+        else:
+            cursor.setPosition(start)
+            cursor.setPosition(start + search.to_qt(new, len(new)), QTextCursor.KeepAnchor)
+        self.editor.setTextCursor(cursor)
         return True
 
     def _nodes_for(self, scope: str) -> List[Node]:
@@ -925,33 +1262,66 @@ class MainWindow(QMainWindow):
             node.children = []
         return [node]
 
+    _EXPORT_KINDS = {
+        "text": ("Export as Text", ".txt", "Text files (*.txt);;All files (*)"),
+        "html": ("Export as HTML", ".html", "Web pages (*.html *.htm);;All files (*)"),
+        "hjt": ("Export as Tree File", ".hjt", "Tree notes (*.hjt)"),
+    }
+
     def export_text(self, scope: str, path: Optional[str] = None) -> bool:
+        return self.export_file("text", scope, path)
+
+    def export_file(self, kind: str, scope: str, path: Optional[str] = None) -> bool:
+        """Export the selected node ('node'), its branch ('branch') or the whole
+        file ('all') as plain text, an HTML page or a separate .hjt file."""
         nodes = self._nodes_for(scope)
+        caption, ext, filters = self._EXPORT_KINDS[kind]
         if path is None:
             if scope == "all":
                 base = os.path.splitext(os.path.basename(self.path or self.source_name or "Untitled"))[0]
             else:
                 base = nodes[0].title
             safe = "".join(c if c not in '/\\:*?"<>|' else "_" for c in base).strip() or "export"
-            path, _ = QFileDialog.getSaveFileName(self, "Export as Text",
-                                                  os.path.join(self._last_dir(), safe + ".txt"),
-                                                  "Text files (*.txt);;All files (*)")
+            path, _ = QFileDialog.getSaveFileName(self, caption, os.path.join(self._last_dir(), safe + ext),
+                                                  filters)
             if not path:
                 return False
+            if not os.path.splitext(path)[1]:
+                path += ext
+        if kind == "hjt" and self.path and os.path.abspath(path) == os.path.abspath(self.path):
+            QMessageBox.warning(self, APP_NAME, "Choose a different name: that is the file you have open.")
+            return False
         try:
-            with open(path, "w", encoding="utf-8", newline="\n") as fh:
-                fh.write(export.outline_text(nodes))
+            if kind == "hjt":
+                doc = Document()
+                if len(nodes) == 1:
+                    doc.root.add_child(nodes[0])
+                else:
+                    wrapper = doc.root.add_child(Node(NEW_FILE_TITLE))
+                    for n in nodes:
+                        wrapper.add_child(n)
+                hjt.save(doc, path, self.encoding)
+            else:
+                if kind == "html":
+                    title = os.path.splitext(os.path.basename(self.path or self.source_name or ""))[0]
+                    content = export.html_page(nodes, title if scope == "all" else "")
+                else:
+                    content = export.outline_text(nodes)
+                with open(path, "w", encoding="utf-8", newline="\n") as fh:
+                    fh.write(content)
         except OSError as exc:
             QMessageBox.critical(self, APP_NAME, f"Could not write \"{path}\".\n\n{exc}")
             return False
         self.statusBar().showMessage(f"Exported to {path}", 5000)
         return True
 
-    def print_nodes(self, with_children: bool = True) -> None:
+    def print_nodes(self, scope: str = "branch") -> None:
+        """Print preview of the selected node ('node'), its branch ('branch')
+        or the whole file ('all')."""
         from PyQt5.QtGui import QTextDocument
         from PyQt5.QtPrintSupport import QPrinter, QPrintPreviewDialog
 
-        nodes = self._nodes_for("branch" if with_children else "node")
+        nodes = self._nodes_for(scope)
         document = QTextDocument()
         document.setDefaultFont(self.editor.font())
         document.setHtml(export.outline_html(nodes))
@@ -963,6 +1333,8 @@ class MainWindow(QMainWindow):
         preview.exec_()
 
     def save(self) -> bool:
+        if self.read_only:
+            return self.save_as()
         if not self.path:
             return self.save_as()
         return self._write(self.path)
@@ -1018,7 +1390,7 @@ class MainWindow(QMainWindow):
 
     def autosave(self) -> None:
         self._commit_editor()
-        if self.path and self.isWindowModified():
+        if self.path and self.isWindowModified() and not self.read_only:
             self._write(self.path, quiet=True)
 
     # ================================================================ misc

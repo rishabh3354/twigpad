@@ -50,7 +50,11 @@ to start, simple to use, and built to last.
 - **Recovers what others can't.** Opens backup copies (`.bak`, `.hjt~`), zipped backups and damaged or truncated files, and saves everything it can.
 - **Merge notebooks.** Combine several files or old backups into one tree.
 - **Safe by default.** Keeps a backup copy when you save, writes files atomically, optional auto-save.
-- **Export and print.** Export a note, a branch or the whole notebook as a text outline, or print it.
+- **Export and print.** Export a note, a branch or the whole notebook as a text outline or an HTML web page, save a branch as its own file, or print it.
+- **Import anything.** Text files (several at once), CSV files (a note per row), other tree files and backups.
+- **Clean up pasted text.** UPPERCASE, lowercase, and removing indentation, quote marks and hard line breaks from pasted email.
+- **Collect snippets.** Automatic Paste adds everything you copy in other programs to the current note.
+- **Read-only mode, tray and portable mode.** Protect a file from changes, hide to the system tray with <kbd>Ctrl</kbd>+<kbd>M</kbd>, and keep settings on a USB stick.
 - **Fast and light.** Starts instantly, works fully from the keyboard, runs on any Linux desktop.
 
 <p align="center">
@@ -74,6 +78,9 @@ you can bring your notes to Linux without Wine and without converting them:
 - **Your links keep working.** `[node://…]` links between notes, and web, email and
   file links, open with <kbd>Ctrl</kbd>+<kbd>H</kbd> just as before.
 - **One top note,** as in your existing files, so the structure stays compatible.
+- **The everyday Lite commands are here:** Format menu, Automatic Paste, text and CSV import,
+  HTML export, Next Siblings Move Right, All Children Move Left, Tree Only / Article Only
+  views, read-only mode and minimize to tray.
 
 Notes formatted as rich text in other editions are opened as plain text.
 
@@ -133,6 +140,7 @@ twigpad --dump notes.hjt      # print a file's tree and exit
 | <kbd>F3</kbd> | Find next |
 | <kbd>F5</kbd> | Insert date and time |
 | <kbd>F6</kbd> or <kbd>Ctrl</kbd>+<kbd>Tab</kbd> | Switch between tree and text |
+| <kbd>Ctrl</kbd>+<kbd>M</kbd> | Minimize to the system tray |
 
 All keys and menus are in the [user guide](docs/user-guide.md).
 

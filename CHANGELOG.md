@@ -27,6 +27,23 @@ All notable changes to Twigpad are listed here. The format follows
 - Sort Whole Tree (all levels).
 - Classic tree look: folder icons, dotted connector lines, +/- boxes and a
   title-only selection highlight (View → Classic Tree Look, on by default).
+- Format menu: UPPERCASE, lowercase, Remove Leading Spaces, and Remove Leading
+  Spaces and Returns (cleans up quoted, hard-wrapped email text).
+- Import several text files at once, and CSV files (one node per row).
+- Edit → Insert → Text from File.
+- Export as an HTML web page (with a table of contents) and export a branch as
+  a separate `.hjt` file.
+- Node → Next Siblings Move Right and All Children Move Left; Copy and Paste
+  Node Name.
+- View → Tree and Article / Tree Only / Article Only; expand or collapse the
+  selected branch one level or all levels.
+- File → Read Only, switched on automatically for files you can't write to.
+- File → Print Whole File.
+- File → Minimize to Tray (Ctrl+M).
+- Options → Automatic Paste: text copied in other programs is collected in the
+  current article.
+- Portable settings: put an empty `twigpad.ini` next to the program or
+  AppImage to keep the settings there.
 
 ### Changed
 - A file has exactly one top node, as the `.hjt` format requires. Files with

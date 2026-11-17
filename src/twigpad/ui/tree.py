@@ -276,6 +276,56 @@ class NoteTree(QTreeWidget):
         self.move_item(cur, prev, prev.childCount())
         return True
 
+    def move_next_siblings_right(self) -> int:
+        """The nodes after the selected one (same level) become its last
+        children. Returns how many nodes moved."""
+        cur = self.currentItem()
+        if cur is None or self.is_top(cur):
+            return 0
+        parent = self._siblings_parent(cur)
+        idx = parent.indexOfChild(cur)
+        moved = []
+        while parent.childCount() > idx + 1:
+            moved.append(parent.takeChild(idx + 1))
+        if not moved:
+            return 0
+        states = {}
+        for m in moved:
+            states.update(self._expanded_states(m))
+        cur.addChildren(moved)
+        for m in moved:
+            self._restore_expanded(m, states)
+        cur.setExpanded(True)
+        self.setCurrentItem(cur)
+        self.structureChanged.emit()
+        return len(moved)
+
+    def move_children_left(self) -> int:
+        """The children of the selected node become its siblings, placed right
+        after it. Not possible on the top node. Returns how many nodes moved."""
+        cur = self.currentItem()
+        if cur is None or self.is_top(cur) or cur.childCount() == 0:
+            return 0
+        parent = self._siblings_parent(cur)
+        idx = parent.indexOfChild(cur)
+        states = self._expanded_states(cur)
+        kids = [cur.takeChild(0) for _ in range(cur.childCount())]
+        parent.insertChildren(idx + 1, kids)
+        for k in kids:
+            self._restore_expanded(k, states)
+        self.setCurrentItem(cur)
+        self.structureChanged.emit()
+        return len(kids)
+
+    @staticmethod
+    def set_branch_expanded(item: QTreeWidgetItem, expanded: bool, all_levels: bool = True) -> None:
+        """Expand or collapse ``item`` (and, with ``all_levels``, everything inside it)."""
+        if all_levels:
+            for it in NoteTree.all_items_under(item):
+                it.setExpanded(expanded)
+        else:
+            item.setExpanded(expanded)
+
     def select_sibling(self, step: int) -> bool:
         """Jump to the next (+1) or previous (-1) node at the same level."""
         cur = self.currentItem()

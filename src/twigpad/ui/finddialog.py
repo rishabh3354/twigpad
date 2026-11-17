@@ -246,7 +246,7 @@ class FindDialog(QDialog):
 
     def replace_one(self) -> None:
         pattern = self._pattern()
-        if pattern is None:
+        if pattern is None or self.win.read_only:
             return
         repl = self.replace_edit.text()
         regex = self.regex_box.isChecked()
@@ -265,7 +265,7 @@ class FindDialog(QDialog):
 
     def replace_all(self) -> int:
         pattern = self._pattern()
-        if pattern is None:
+        if pattern is None or self.win.read_only:
             return 0
         win = self.win
         win._commit_editor()

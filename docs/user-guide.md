@@ -30,6 +30,15 @@ switch panes). The same commands are in the **Node** menu and on right-click.
 **Node → Sort Whole Tree** sorts every level. You can also drag a node onto
 another node (to put it inside) or between two nodes.
 
+More in the **Node** menu:
+
+- **Next Siblings Move Right**: the nodes below the selected one, at the same
+  level, move inside it.
+- **All Children Move Left**: the nodes inside the selected one move out a
+  level, to just below it.
+- **Copy Node Name** copies the title; **Paste Node Name** renames the node to
+  the first line of the clipboard.
+
 ### The top node
 
 A file has exactly one top node, which holds everything else. You can rename
@@ -51,9 +60,26 @@ its first line.
 | Ctrl+H | Follow the link at the cursor |
 | Ctrl+Tab or F6 | Switch between tree and article |
 
-**View** sets word wrap and separate fonts for the tree and the article.
-**View → Classic Tree Look** switches between the classic tree (folder icons,
-dotted lines, +/- boxes) and your desktop's standard tree style.
+**Edit → Insert → Text from File** inserts a text file at the cursor.
+
+The **Format** menu changes the selected text, or the whole article when
+nothing is selected (Ctrl+Z undoes it):
+
+| Command | What it does |
+|---|---|
+| UPPERCASE / lowercase | Changes letter case |
+| Remove Leading Spaces | Removes spaces and tabs at the start of each line |
+| Remove Leading Spaces and Returns | Removes indentation and `>` quote marks, and joins wrapped lines into paragraphs: for text pasted from an email |
+
+## View
+
+- **Tree and Article**, **Tree Only** or **Article Only** chooses which panes
+  are shown; Twigpad remembers the choice.
+- **Expand / Collapse Selected Node** opens or closes one branch, one level or
+  all levels deep; **Expand All** and **Collapse All** do the whole tree.
+- Word wrap, and separate fonts for the tree and the article.
+- **Classic Tree Look** switches between the classic tree (folder icons,
+  dotted lines, +/- boxes) and your desktop's standard tree style.
 
 ## Links
 
@@ -96,9 +122,19 @@ expressions. **Find All** lists every match; click one to jump to it.
   what was repaired.
 - **File → Import → Tree File or Backup** adds every node of another file
   inside the selected node, for combining several files into one.
-- **File → Import → Text File** adds a text file as a new node.
-- **File → Export as Text** writes the selected node, its branch or the whole
-  file as a numbered outline. **File → Print** shows a print preview.
+- **File → Import → Text Files** adds one or more text files, each as a new
+  node. **CSV File** adds a node per row: the first column is the title, the
+  other columns become the article.
+- **File → Export** writes the selected node, its branch or the whole file as
+  a numbered text outline or as an HTML web page with a table of contents.
+  **Selected Node and Subnodes as Tree File** saves a branch as its own `.hjt`
+  file.
+- **File → Print** shows a print preview of the selected branch, the selected
+  node only, or the whole file.
+- **File → Read Only** protects the file from changes. Files you don't have
+  permission to change are opened read only; **Save** then asks for a new name.
+- **File → Minimize to Tray** (Ctrl+M) hides the window to the system tray;
+  click the tray icon to bring it back. Without a tray it minimizes normally.
 - Files are saved in the Windows-compatible encoding when possible, so they
   stay readable by other programs that use the `.hjt` format.
 
@@ -109,6 +145,13 @@ expressions. **Find All** lists every match; click one to jump to it.
 | Open last file at startup | On |
 | Keep a backup copy (`<file>.hjt.bak`) when saving: the file as it was when you opened it | On |
 | Auto-save every 5 minutes | Off |
+| Automatic Paste: text you copy in other programs is added to the end of the current article (for collecting snippets) | Off, not remembered |
+
+### Portable use
+
+To run Twigpad from a USB stick, create an empty file called `twigpad.ini`
+next to the AppImage (or the `twigpad` program). Twigpad then keeps its
+settings in that file instead of your home folder.
 
 ## Command line
 
